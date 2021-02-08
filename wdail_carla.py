@@ -16,7 +16,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # set key parameters
 def argsparser():
     parser = argparse.ArgumentParser("WDAIL")
-    parser.add_argument('--env_name', help='environment ID', default='Ant-v2')
+    parser.add_argument('--env_name', help='environment ID', default='carla')
     parser.add_argument('--algo', help='algorithm ID', default='WDAIL')
     parser.add_argument('--log-dir', default='/tmp/gym/', help='directory to save agent logs (default: /tmp/gym)')
     # general
@@ -33,7 +33,7 @@ def argsparser():
 
     #ppo
     parser.add_argument('--num_processes', help='num_processes', type=int, default=1)
-    parser.add_argument('--num-steps', help='num-steps', type=int, default=2048)
+    parser.add_argument('--num-steps', help='num-steps', type=int, default=1000)
     parser.add_argument('--lr', help='learning rate', type=float, default=3e-4)
     parser.add_argument('--batch_size', help='batch size', type=int, default=64)
     parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=10)

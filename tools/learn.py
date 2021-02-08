@@ -89,6 +89,8 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
             # action, log_prob, value = model_step(cl_args=cl_args, model=model, state=cur_state, device=device)
             # time.sleep(.002)
             # next_state, reward, done, infos = envs.step(action)   # error 01
+            print(action)
+            print(step)
             obs, reward, done, infos = envs.step(action)
 
             for info in infos:

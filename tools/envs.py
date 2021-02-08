@@ -8,14 +8,14 @@ from gym.spaces.box import Box
 from vec_env.monitor import Monitor
 from vec_env.vec_env import VecEnvWrapper
 from vec_env.subproc_vec_env import SubprocVecEnv
-from circle_env import CircleEnv
+from carla_env import CarlaEnv
 from vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
 
 
 def make_env(env_id, seed, rank, log_dir, allow_early_resets):
     def _thunk():
-        env = CircleEnv()
+        env = CarlaEnv()
 
         env.seed(seed + rank)
 

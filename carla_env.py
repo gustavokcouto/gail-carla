@@ -9,6 +9,9 @@ import time
 import carla
 
 from PIL import Image, ImageDraw
+from pathlib import Path
+from auto_pilot.route_parser import parse_routes_file
+from auto_pilot.route_manipulation import interpolate_trajectory
 
 
 VEHICLE_NAME = 'vehicle.lincoln.mkz2017'
@@ -194,7 +197,7 @@ class IMU(object):
 class CarlaEnv(gym.Env):
     def __init__(self, town='Town01', port=2000):
         super(CarlaEnv, self).__init__()
-        self._client = carla.Client('192.168.0.4', port)
+        self._client = carla.Client('localhost', port)
         self._client.set_timeout(30.0)
 
         set_sync_mode(self._client, False)
@@ -213,10 +216,10 @@ class CarlaEnv(gym.Env):
         self._cameras = dict()
 
         self.action_space = spaces.Box(low=-10, high=10,
-                                            shape=(2,), dtype=np.float32)
+                                                    shape=(3,), dtype=np.float32)
 
-        self.observation_space = spaces.Box(low=-10, high=10,
-                                            shape=(10,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1000000000, high=1000000000,
+                                            shape=(7,), dtype=np.float32)
 
     def _spawn_player(self, start_pose):
         vehicle_bp = np.random.choice(self._blueprints.filter(VEHICLE_NAME))
@@ -238,7 +241,14 @@ class CarlaEnv(gym.Env):
         self._gnss = GNSS(self._world, self._player)
         self._imu = IMU(self._world, self._player)
 
-    def reset(self, start_pose):
+    def reset(self):
+        route_file = Path('data/route_00.xml')
+        trajectory = parse_routes_file(route_file)
+        global_plan_gps, global_plan_world_coord = interpolate_trajectory(self._world, trajectory)
+
+        start_pose = global_plan_world_coord[0][0]
+        start_pose.location.z += 0.5
+
         set_sync_mode(self._client, True)
 
         self._time_start = time.time()
@@ -252,7 +262,7 @@ class CarlaEnv(gym.Env):
 
         ticks = 10
         for _ in range(ticks):
-            self.step()
+            self.step(None)
 
         for x in self._actor_dict['camera']:
             x.get()
@@ -260,7 +270,9 @@ class CarlaEnv(gym.Env):
         self._time_start = time.time()
         self._tick = 0
         
-        return self.step()
+        action = [0]
+        obs, _, _, _ = self.step(None)
+        return obs
 
     def tick_scenario(self):
         spectator = self._world.get_spectator()
@@ -269,8 +281,12 @@ class CarlaEnv(gym.Env):
                 self._player.get_location() + carla.Location(z=50),
                 carla.Rotation(pitch=-90)))
 
-    def step(self, control=None):
-        if control is not None:
+    def step(self, action):
+        if action is not None:
+            control = carla.VehicleControl()
+            control.steer = float(action[0])
+            control.throttle = float(action[1])
+            control.brake = float(action[2])
             self._player.apply_control(control)
 
         self._world.tick()
@@ -281,21 +297,19 @@ class CarlaEnv(gym.Env):
         velocity = self._player.get_velocity()
 
         # Put here for speed (get() busy polls queue).
-        obs = {key: val.get() for key, val in self._cameras.items()}
         gps = self._gnss.get()
         compass = self._imu.get()[-1]
-        
-        obs.update({
-            'wall': time.time() - self._time_start,
-            'tick': self._tick,
-            'x': transform.location.x,
-            'y': transform.location.y,
-            'gps': gps,
-            'compass': compass,
-            'theta': transform.rotation.yaw,
-            'speed': np.linalg.norm([velocity.x, velocity.y, velocity.z]),
-            })
-        
+
+        obs = [
+            transform.location.x,
+            transform.location.y,
+            transform.rotation.yaw,
+            np.linalg.norm([velocity.x, velocity.y, velocity.z]),
+            gps[0],
+            gps[1],
+            compass,
+        ]
+        obs = np.array(obs).astype(np.float64)
         reward = 0
         done = False
         info = {}

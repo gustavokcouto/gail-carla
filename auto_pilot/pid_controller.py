@@ -3,7 +3,7 @@ from collections import deque
 import numpy as np
 
 
-DEBUG = True
+DEBUG = False
 
 
 class PIDController(object):

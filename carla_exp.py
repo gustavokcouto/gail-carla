@@ -1,32 +1,36 @@
-import math
-import torch
+import sys
+import json
+
+from pathlib import Path
+
 import numpy as np
-from circle_env import CircleEnv
+import tqdm
+import carla
+import cv2
+import torch
+import pandas as pd
 
+from PIL import Image
 
-def circle_expert(obs):
-    center_x = 0.0
-    center_y = 0.3
-    pos_x = obs[-2]
-    pos_y = obs[-1]
-    action_angle = math.atan2(pos_y - center_y, pos_x - center_x) + math.pi / 2
-    radius_factor = (
-        (center_x ** 2 + center_y ** 2) ** 0.5
-        - ((pos_x - center_x) ** 2 + (pos_y - center_y) ** 2) ** 0.5
-    ) / (center_x ** 2 + center_y ** 2) ** 0.5
-    action_angle -= 3 * radius_factor
+from carla_env import CarlaEnv
+from auto_pilot.auto_pilot import AutoPilot
 
-    return [math.cos(action_angle), math.sin(action_angle)]
+from auto_pilot.route_parser import parse_routes_file
+from auto_pilot.route_manipulation import interpolate_trajectory
 
 
 def gen_trajectories(file_path=''):
     # Instantiate the env
-    env = CircleEnv()
+    np.random.seed(1337)
+    env = CarlaEnv()
+
+    route_file = Path('data/route_00.xml')
+    trajectory = parse_routes_file(route_file)
+    global_plan_gps, global_plan_world_coord = interpolate_trajectory(env._world, trajectory)
 
     # Test the trained agent
-    n_episodes = 20
+    n_episodes = 5
     n_steps = 1000
-    obs = env.reset()
     states = []
     actions = []
     rewards = []
@@ -36,15 +40,15 @@ def gen_trajectories(file_path=''):
         states_ep = []
         actions_ep = []
         rewards_ep = []
-        obs = env.reset()
+        obs, _, _, _ = env.reset()
+        auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
         states_ep.append(obs)
         for step in range(n_steps):
-            action = circle_expert(obs)
+            action = auto_pilot.run_step(obs)
             actions_ep.append(action)
-            obs, reward, done, _ = env.step(action)
+            obs, reward, _, _ = env.step(action)
+            reward = 0
             rewards_ep.append(reward)
-            if done:
-                break
             states_ep.append(obs)
         states.append(states_ep)
         actions.append(actions_ep)
@@ -65,5 +69,5 @@ def gen_trajectories(file_path=''):
         torch.save(data, file_path)
 
 if __name__ == "__main__":
-    gen_trajectories('gail_experts/trajs_ant.pt')
+    gen_trajectories('gail_experts/trajs_carla.pt')
     pass

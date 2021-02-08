@@ -3,9 +3,9 @@ import math
 import numpy as np
 import carla
 
-from planner import RoutePlanner
-from pid_controller import PIDController
-from route_manipulation import downsample_route
+from auto_pilot.planner import RoutePlanner
+from auto_pilot.pid_controller import PIDController
+from auto_pilot.route_manipulation import downsample_route
 
 
 class AutoPilot():
@@ -59,7 +59,7 @@ class AutoPilot():
         return steer, throttle, brake, target_speed
 
     def _get_position(self, observation):
-        gps = observation['gps']
+        gps = [observation[4], observation[5]]
         gps = (gps - self._command_planner.mean) * self._command_planner.scale
 
         return gps
@@ -69,16 +69,11 @@ class AutoPilot():
 
         near_node, _ = self._waypoint_planner.run_step(position)
         far_node, _ = self._command_planner.run_step(position)
-        print('--------------')
-        print(position)
-        print(near_node)
-        print(far_node)
-        print(observation['compass'])
-        steer, throttle, brake, target_speed = self._get_control(near_node, far_node, position, observation['speed'], observation['compass'])
+        steer, throttle, brake, target_speed = self._get_control(near_node, far_node, position, observation[3], observation[6])
 
-        control = carla.VehicleControl()
-        control.steer = steer + 1e-2 * np.random.randn()
-        control.throttle = throttle
-        control.brake = float(brake)
+        control = []
+        control.append(steer + 1e-2 * np.random.randn())
+        control.append(throttle)
+        control.append(float(brake))
 
         return control
