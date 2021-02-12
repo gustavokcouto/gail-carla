@@ -54,9 +54,7 @@ class AutoPilot():
         throttle = self._speed_controller.step(delta)
         throttle = np.clip(throttle, 0.0, 0.75)
 
-        brake = False
-
-        return steer, throttle, brake, target_speed
+        return steer, throttle
 
     def _get_position(self, observation):
         gps = [observation[4], observation[5]]
@@ -69,11 +67,10 @@ class AutoPilot():
 
         near_node, _ = self._waypoint_planner.run_step(position)
         far_node, _ = self._command_planner.run_step(position)
-        steer, throttle, brake, target_speed = self._get_control(near_node, far_node, position, observation[3], observation[6])
+        steer, throttle = self._get_control(near_node, far_node, position, observation[3], observation[6])
 
         control = []
         control.append(steer + 1e-2 * np.random.randn())
         control.append(throttle)
-        control.append(float(brake))
 
         return control

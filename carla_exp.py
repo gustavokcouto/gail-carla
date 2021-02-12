@@ -29,8 +29,8 @@ def gen_trajectories(file_path=''):
     global_plan_gps, global_plan_world_coord = interpolate_trajectory(env._world, trajectory)
 
     # Test the trained agent
-    n_episodes = 5
-    n_steps = 1000
+    n_episodes = 10
+    n_steps = 800
     states = []
     actions = []
     rewards = []
@@ -40,7 +40,7 @@ def gen_trajectories(file_path=''):
         states_ep = []
         actions_ep = []
         rewards_ep = []
-        obs, _, _, _ = env.reset()
+        obs = env.reset()
         auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
         states_ep.append(obs)
         for step in range(n_steps):

@@ -216,18 +216,54 @@ class CarlaEnv(gym.Env):
         self._cameras = dict()
 
         self.action_space = spaces.Box(low=-10, high=10,
-                                                    shape=(3,), dtype=np.float32)
+                                                    shape=(2,), dtype=np.float32)
 
         self.observation_space = spaces.Box(low=-1000000000, high=1000000000,
                                             shape=(7,), dtype=np.float32)
+
+        route_file = Path('data/route_00.xml')
+        trajectory = parse_routes_file(route_file)
+        global_plan_gps, global_plan_world_coord = interpolate_trajectory(self._world, trajectory)
+
+        self.start_pose = global_plan_world_coord[0][0]
+        self.start_pose.location.z += 0.5
+
+        self.ep_length = 800
+        self.cur_length = 0
+        self.episode_reward = 0
+        self.lane_invasion = False
+        self.collision = False
 
     def _spawn_player(self, start_pose):
         vehicle_bp = np.random.choice(self._blueprints.filter(VEHICLE_NAME))
         vehicle_bp.set_attribute('role_name', 'hero')
 
         self._player = self._world.spawn_actor(vehicle_bp, start_pose)
-
         self._actor_dict['player'].append(self._player)
+
+        lane_bp = self._world.get_blueprint_library().find('sensor.other.lane_invasion')
+        lane_location = carla.Location(0,0,0)
+        lane_rotation = carla.Rotation(0,0,0)
+        lane_transform = carla.Transform(lane_location,lane_rotation)
+        ego_lane = self._world.spawn_actor(lane_bp,lane_transform,attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
+        ego_lane.listen(lambda lane: self.lane_callback(lane))
+        self._actor_dict['lane_detector'].append(ego_lane)
+
+        col_bp = self._world.get_blueprint_library().find('sensor.other.collision')
+        col_location = carla.Location(0,0,0)
+        col_rotation = carla.Rotation(0,0,0)
+        col_transform = carla.Transform(col_location,col_rotation)
+        ego_col = self._world.spawn_actor(col_bp,col_transform,attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
+        ego_col.listen(lambda colli: self.col_callback(colli))
+        self._actor_dict['col_detector'].append(ego_col)
+
+    def lane_callback(self, lane):
+        self.lane_invasion = True
+        print("Lane invasion detected:\n"+str(lane)+'\n')
+
+    def col_callback(self, colli):
+        self.collision = True
+        print("Collision detected:\n"+str(colli)+'\n')
 
     def _setup_sensors(self):
         """
@@ -242,13 +278,6 @@ class CarlaEnv(gym.Env):
         self._imu = IMU(self._world, self._player)
 
     def reset(self):
-        route_file = Path('data/route_00.xml')
-        trajectory = parse_routes_file(route_file)
-        global_plan_gps, global_plan_world_coord = interpolate_trajectory(self._world, trajectory)
-
-        start_pose = global_plan_world_coord[0][0]
-        start_pose.location.z += 0.5
-
         set_sync_mode(self._client, True)
 
         self._time_start = time.time()
@@ -257,7 +286,7 @@ class CarlaEnv(gym.Env):
             self._client.apply_batch([carla.command.DestroyActor(x) for x in self._actor_dict[actor_type]])
             self._actor_dict[actor_type].clear()
         
-        self._spawn_player(start_pose)
+        self._spawn_player(self.start_pose)
         self._setup_sensors()
 
         ticks = 10
@@ -272,6 +301,10 @@ class CarlaEnv(gym.Env):
         
         action = [0]
         obs, _, _, _ = self.step(None)
+        self.cur_length = 0
+        self.episode_reward = 0
+        self.lane_invasion = False
+        self.collision = False
         return obs
 
     def tick_scenario(self):
@@ -286,7 +319,7 @@ class CarlaEnv(gym.Env):
             control = carla.VehicleControl()
             control.steer = float(action[0])
             control.throttle = float(action[1])
-            control.brake = float(action[2])
+            control.brake = 0.0
             self._player.apply_control(control)
 
         self._world.tick()
@@ -297,6 +330,8 @@ class CarlaEnv(gym.Env):
         velocity = self._player.get_velocity()
 
         # Put here for speed (get() busy polls queue).
+        for key, val in self._cameras.items():
+            val.get()
         gps = self._gnss.get()
         compass = self._imu.get()[-1]
 
@@ -310,9 +345,13 @@ class CarlaEnv(gym.Env):
             compass,
         ]
         obs = np.array(obs).astype(np.float64)
+        self.cur_length += 1
         reward = 0
         done = False
         info = {}
+        if self.cur_length >= self.ep_length or self.lane_invasion or self.collision:
+            info['episode'] = {'r': self.episode_reward}
+            done = True
         return obs, reward, done, info
 
 
