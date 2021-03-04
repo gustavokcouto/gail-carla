@@ -57,7 +57,7 @@ class AutoPilot():
         return steer, throttle
 
     def _get_position(self, observation):
-        gps = [observation[4], observation[5]]
+        gps = [observation[0], observation[1]]
         gps = (gps - self._command_planner.mean) * self._command_planner.scale
 
         return gps
@@ -67,7 +67,7 @@ class AutoPilot():
 
         near_node, _ = self._waypoint_planner.run_step(position)
         far_node, _ = self._command_planner.run_step(position)
-        steer, throttle = self._get_control(near_node, far_node, position, observation[3], observation[6])
+        steer, throttle = self._get_control(near_node, far_node, position, observation[3], observation[2])
 
         control = []
         control.append(steer + 1e-2 * np.random.randn())

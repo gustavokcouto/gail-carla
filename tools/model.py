@@ -176,8 +176,8 @@ class CNNBase(NNBase):
         self.main = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)), nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)), nn.ReLU())
+            init_(nn.Conv2d(64, 32, 3, stride=2)), nn.ReLU(), Flatten(),
+            init_(nn.Linear(64 * 7 * 7, hidden_size)), nn.ReLU())
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0))
@@ -187,7 +187,7 @@ class CNNBase(NNBase):
         self.train()
 
     def forward(self, inputs, rnn_hxs, masks):
-        x = self.main(inputs / 255.0)
+        x = self.main(inputs)
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)

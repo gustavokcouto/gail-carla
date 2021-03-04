@@ -137,7 +137,7 @@ def train(args):
         max_grad_norm=args.max_grad_norm)
 
     # discriminator
-    discr = Discriminator(envs.observation_space.shape[0] + envs.action_space.shape[0], 100, device, args.reward_type, args.update_rms)
+    discr = Discriminator(envs.action_space.shape[0], 100, device, args.reward_type, args.update_rms)
 
     file_name = os.path.join(
         args.gail_experts_dir, "trajs_{}.pt".format(

@@ -89,8 +89,6 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
             # action, log_prob, value = model_step(cl_args=cl_args, model=model, state=cur_state, device=device)
             # time.sleep(.002)
             # next_state, reward, done, infos = envs.step(action)   # error 01
-            print(action)
-            print(step)
             obs, reward, done, infos = envs.step(action)
 
             for info in infos:
@@ -109,7 +107,7 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
                  for info in infos])
             rollouts.insert(obs, recurrent_hidden_states, action,
                             action_log_prob, value, reward, masks, bad_masks)
-
+        print('finished sim')
         with torch.no_grad():
             next_value = actor_critic.get_value(
                 rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],

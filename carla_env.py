@@ -57,6 +57,8 @@ class Camera(object):
         if self.type == 'semantic_segmentation':
             return array[:, :, 0]
 
+        array = np.transpose(array, (2, 0, 1))
+
         return array
 
     def __del__(self):
@@ -218,8 +220,8 @@ class CarlaEnv(gym.Env):
         self.action_space = spaces.Box(low=-10, high=10,
                                                     shape=(2,), dtype=np.float32)
 
-        self.observation_space = spaces.Box(low=-1000000000, high=1000000000,
-                                            shape=(7,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=0, high=255,
+                                            shape=(3,144,256), dtype=np.uint8)
 
         route_file = Path('data/route_00.xml')
         trajectory = parse_routes_file(route_file)
@@ -233,6 +235,8 @@ class CarlaEnv(gym.Env):
         self.episode_reward = 0
         self.lane_invasion = False
         self.collision = False
+        self.collision_sensor = None
+        self.lane_sensor = None
 
     def _spawn_player(self, start_pose):
         vehicle_bp = np.random.choice(self._blueprints.filter(VEHICLE_NAME))
@@ -247,7 +251,7 @@ class CarlaEnv(gym.Env):
         lane_transform = carla.Transform(lane_location,lane_rotation)
         ego_lane = self._world.spawn_actor(lane_bp,lane_transform,attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
         ego_lane.listen(lambda lane: self.lane_callback(lane))
-        self._actor_dict['lane_detector'].append(ego_lane)
+        self.lane_sensor = ego_lane
 
         col_bp = self._world.get_blueprint_library().find('sensor.other.collision')
         col_location = carla.Location(0,0,0)
@@ -255,7 +259,7 @@ class CarlaEnv(gym.Env):
         col_transform = carla.Transform(col_location,col_rotation)
         ego_col = self._world.spawn_actor(col_bp,col_transform,attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
         ego_col.listen(lambda colli: self.col_callback(colli))
-        self._actor_dict['col_detector'].append(ego_col)
+        self.collision_sensor = ego_col
 
     def lane_callback(self, lane):
         self.lane_invasion = True
@@ -282,10 +286,17 @@ class CarlaEnv(gym.Env):
 
         self._time_start = time.time()
         self._cameras.clear()
+        
+        if self.lane_sensor:
+            self.lane_sensor.destroy()
+        
+        if self.collision_sensor:
+            self.collision_sensor.destroy()
+
         for actor_type in list(self._actor_dict.keys()):
             self._client.apply_batch([carla.command.DestroyActor(x) for x in self._actor_dict[actor_type]])
-            self._actor_dict[actor_type].clear()
-        
+            self._actor_dict[actor_type].clear()        
+
         self._spawn_player(self.start_pose)
         self._setup_sensors()
 
@@ -306,6 +317,15 @@ class CarlaEnv(gym.Env):
         self.lane_invasion = False
         self.collision = False
         return obs
+
+    def _clear_all_actors(self, actor_filters):
+        """Clear specific actors."""
+        for actor_filter in actor_filters:
+            for actor in self._world.get_actors().filter(actor_filter):
+                if actor.is_alive:
+                    if actor.type_id == 'controller.ai.walker':
+                        actor.stop()
+                    actor.destroy()
 
     def tick_scenario(self):
         spectator = self._world.get_spectator()
@@ -330,28 +350,29 @@ class CarlaEnv(gym.Env):
         velocity = self._player.get_velocity()
 
         # Put here for speed (get() busy polls queue).
-        for key, val in self._cameras.items():
-            val.get()
+        result = {key: val.get() for key, val in self._cameras.items()}
+        obs = result['rgb']
         gps = self._gnss.get()
         compass = self._imu.get()[-1]
 
-        obs = [
-            transform.location.x,
-            transform.location.y,
-            transform.rotation.yaw,
-            np.linalg.norm([velocity.x, velocity.y, velocity.z]),
-            gps[0],
-            gps[1],
-            compass,
-        ]
-        obs = np.array(obs).astype(np.float64)
         self.cur_length += 1
         reward = 0
         done = False
-        info = {}
+        transform_x = transform.location.x
+        info = {
+            'x': transform.location.x,
+            'y': transform.location.y,
+            'yaw': transform.rotation.yaw,
+            'speed': np.linalg.norm([velocity.x, velocity.y, velocity.z]),
+            'gps_x': gps[0],
+            'gps_y': gps[1],
+            'compass': compass,
+        }
         if self.cur_length >= self.ep_length or self.lane_invasion or self.collision:
             info['episode'] = {'r': self.episode_reward}
             done = True
+        self.info = info
+
         return obs, reward, done, info
 
 

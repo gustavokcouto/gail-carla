@@ -44,7 +44,14 @@ def gen_trajectories(file_path=''):
         auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
         states_ep.append(obs)
         for step in range(n_steps):
-            action = auto_pilot.run_step(obs)
+            ego_metrics = [
+                env.info['gps_x'],
+                env.info['gps_y'],
+                env.info['compass'],
+                env.info['speed']
+            ]
+
+            action = auto_pilot.run_step(ego_metrics)
             actions_ep.append(action)
             obs, reward, _, _ = env.step(action)
             reward = 0
