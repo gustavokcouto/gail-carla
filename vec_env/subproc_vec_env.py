@@ -11,20 +11,20 @@ def worker(remote, parent_remote, env_fn_wrapper):
         while True:
             cmd, data = remote.recv()
             if cmd == 'step':
-                ob, reward, done, info = env.step(data)
+                ob, metrics, reward, done, info = env.step(data)
                 if done:
-                    ob = env.reset()
-                remote.send((ob, reward, done, info))
+                    ob, metrics = env.reset()
+                remote.send((ob, metrics, reward, done, info))
             elif cmd == 'reset':
-                ob = env.reset()
-                remote.send(ob)
+                ob, metrics = env.reset()
+                remote.send((ob, metrics))
             elif cmd == 'render':
                 remote.send(env.render(mode='rgb_array'))
             elif cmd == 'close':
                 remote.close()
                 break
             elif cmd == 'get_spaces_spec':
-                remote.send((env.observation_space, env.action_space, env.spec))
+                remote.send((env.observation_space, env.metrics_space, env.action_space, env.spec))
             else:
                 raise NotImplementedError
     except KeyboardInterrupt:
@@ -58,9 +58,9 @@ class SubprocVecEnv(VecEnv):
             remote.close()
 
         self.remotes[0].send(('get_spaces_spec', None))
-        observation_space, action_space, self.spec = self.remotes[0].recv()
+        observation_space, metrics_space, action_space, self.spec = self.remotes[0].recv()
         self.viewer = None
-        VecEnv.__init__(self, len(env_fns), observation_space, action_space)
+        VecEnv.__init__(self, len(env_fns), observation_space, metrics_space, action_space)
 
     def step_async(self, actions):
         self._assert_not_closed()
@@ -72,14 +72,16 @@ class SubprocVecEnv(VecEnv):
         self._assert_not_closed()
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
-        obs, rews, dones, infos = zip(*results)
-        return _flatten_obs(obs), np.stack(rews), np.stack(dones), infos
+        obs, metrics, rews, dones, infos = zip(*results)
+        return _flatten_obs(obs), _flatten_obs(metrics), np.stack(rews), np.stack(dones), infos
 
     def reset(self):
         self._assert_not_closed()
         for remote in self.remotes:
             remote.send(('reset', None))
-        return _flatten_obs([remote.recv() for remote in self.remotes])
+        results = [remote.recv() for remote in self.remotes]
+        obs, metrics = zip(*results)
+        return _flatten_obs(obs), _flatten_obs(metrics)
 
     def close_extras(self):
         self.closed = True

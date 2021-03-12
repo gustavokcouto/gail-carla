@@ -8,10 +8,13 @@ DEBUG = False
 
 
 class Plotter(object):
-    def __init__(self, size):
+    def __init__(self, size, gps=False):
         self.size = size
         self.clear()
         self.title = str(self.size)
+        self.scale = 5.5
+        if gps:
+            self.scale = 100000
 
     def clear(self):
         from PIL import Image, ImageDraw
@@ -20,7 +23,7 @@ class Plotter(object):
         self.draw = ImageDraw.Draw(self.img)
 
     def dot(self, pos, node, color=(255, 255, 255), r=2):
-        x, y = 5.5 * (pos - node)
+        x, y = self.scale * (pos - node)
         x += self.size / 2
         y += self.size / 2
 
@@ -37,15 +40,19 @@ class Plotter(object):
 
 
 class RoutePlanner(object):
-    def __init__(self, min_distance, max_distance, debug_size=256):
+    def __init__(self, min_distance, max_distance, debug_size=256, gps=False):
         self.route = deque()
         self.min_distance = min_distance
         self.max_distance = max_distance
 
         self.mean = np.array([49.0, 8.0])
         self.scale = np.array([111324.60662786, 73032.1570362])
+        if gps:
+            self.mean = np.array([0, 0])
+            self.scale = np.array([1, 1])
+        self.gps = gps
 
-        self.debug = Plotter(debug_size)
+        self.debug = Plotter(debug_size, gps=gps)
 
     def set_route(self, global_plan, gps=False):
         self.route.clear()
@@ -81,11 +88,11 @@ class RoutePlanner(object):
             if distance <= self.min_distance and distance > farthest_in_range:
                 farthest_in_range = distance
                 to_pop = i
-
-            r = 255 * int(distance > self.min_distance)
-            g = 255 * int(self.route[i][1].value == 4)
-            b = 255
-            self.debug.dot(gps, self.route[i][0], (r, g, b))
+            if not self.gps:
+                r = 255 * int(distance > self.min_distance)
+                g = 255 * int(self.route[i][1].value == 4)
+                b = 255
+                self.debug.dot(gps, self.route[i][0], (r, g, b))
 
         for _ in range(to_pop):
             if len(self.route) > 2:

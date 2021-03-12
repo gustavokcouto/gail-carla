@@ -38,9 +38,10 @@ class VecEnv(ABC):
         'render.modes': ['human', 'rgb_array']
     }
 
-    def __init__(self, num_envs, observation_space, action_space):
+    def __init__(self, num_envs, observation_space, metrics_space, action_space):
         self.num_envs = num_envs
         self.observation_space = observation_space
+        self.metrics_space = metrics_space
         self.action_space = action_space
 
     @abstractmethod
@@ -129,11 +130,12 @@ class VecEnvWrapper(VecEnv):
     of environments at once.
     """
 
-    def __init__(self, venv, observation_space=None, action_space=None):
+    def __init__(self, venv, observation_space=None, metrics_space=None, action_space=None):
         self.venv = venv
         VecEnv.__init__(self,
                         num_envs=venv.num_envs,
                         observation_space=observation_space or venv.observation_space,
+                        metrics_space=metrics_space or venv.metrics_space,
                         action_space=action_space or venv.action_space)
 
     def step_async(self, actions):
@@ -158,16 +160,16 @@ class VecEnvWrapper(VecEnv):
 
 class VecEnvObservationWrapper(VecEnvWrapper):
     @abstractmethod
-    def process(self, obs):
+    def process(self, obs, metrics):
         pass
 
     def reset(self):
-        obs = self.venv.reset()
-        return self.process(obs)
+        obs, metrics = self.venv.reset()
+        return self.process(obs, metrics)
 
     def step_wait(self):
-        obs, rews, dones, infos = self.venv.step_wait()
-        return self.process(obs), rews, dones, infos
+        obs, metrics, rews, dones, infos = self.venv.step_wait()
+        return self.process(obs, metrics), rews, dones, infos
 
 class CloudpickleWrapper(object):
     """

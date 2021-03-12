@@ -18,6 +18,9 @@ from auto_pilot.auto_pilot import AutoPilot
 from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
 
+SAVE_PATH = Path('data/carla')
+FRAME_SKIP = 1
+EPISODE_LENGTH = 800
 
 def gen_trajectories(file_path=''):
     # Instantiate the env
@@ -29,46 +32,80 @@ def gen_trajectories(file_path=''):
     global_plan_gps, global_plan_world_coord = interpolate_trajectory(env._world, trajectory)
 
     # Test the trained agent
-    n_episodes = 10
-    n_steps = 800
+    n_episodes = 4
     states = []
+    metrics = []
     actions = []
     rewards = []
 
     lens = []
-    for _ in range(n_episodes):
+    for episode in range(n_episodes):
         states_ep = []
+        metrics_ep = []
         actions_ep = []
         rewards_ep = []
-        obs = env.reset()
+
+        (SAVE_PATH/('%02d' % episode)).mkdir(exist_ok=True)
+        # (SAVE_PATH/('%02d' % episode)/'rgb').mkdir(exist_ok=True)
+
+        measurements = list()
+        obs, step_metrics = env.reset()
         auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
-        states_ep.append(obs)
-        for step in range(n_steps):
+        for step in tqdm.tqdm(range(EPISODE_LENGTH * FRAME_SKIP)):
             ego_metrics = [
                 env.info['gps_x'],
                 env.info['gps_y'],
                 env.info['compass'],
                 env.info['speed']
             ]
-
             action = auto_pilot.run_step(ego_metrics)
-            actions_ep.append(action)
-            obs, reward, _, _ = env.step(action)
-            reward = 0
-            rewards_ep.append(reward)
-            states_ep.append(obs)
+            if step % FRAME_SKIP == 0:
+                metrics_ep.append(step_metrics)
+                reward = 0
+                rewards_ep.append(reward)
+                states_ep.append(obs)
+                actions_ep.append(action)
+
+                # i = step // FRAME_SKIP
+                # rgb = obs.pop('rgb')
+                # Image.fromarray(rgb).save(SAVE_PATH/('%02d' % episode)/'rgb'/('%04d.png' % i))
+                step_measurements = env.info
+                step_measurements.update({
+                    'steer': action[0],
+                })
+                measurements.append(step_measurements)
+                
+            obs, step_metrics, reward, _, _ = env.step(action)
+        metrics_ep.append(step_metrics)
+        reward = 0
+        rewards_ep.append(reward)
+        states_ep.append(obs)
+
         states.append(states_ep)
         actions.append(actions_ep)
         rewards.append(rewards_ep)
-        lens.append(step + 1)
+        metrics.append(metrics_ep)
+        lens.append(len(actions_ep))
 
+        # i = (EPISODE_LENGTH * FRAME_SKIP) // FRAME_SKIP
+        # rgb = obs.pop('rgb')
+        # Image.fromarray(rgb).save(SAVE_PATH/('%02d' % episode)/'rgb'/('%04d.png' % i))
+        step_measurements = env.info
+        step_measurements.update({
+            'steer': action[0],
+        })
+        measurements.append(step_measurements)
+        pd.DataFrame(measurements).to_csv(SAVE_PATH/('%02d' % episode)/'measurements.csv', index=False)
+    
     states = torch.as_tensor(states).float()
+    metrics = torch.as_tensor(metrics).float()
     actions = torch.as_tensor(actions).float()
     lens = torch.as_tensor(lens).long()
     rewards = torch.as_tensor(rewards).long()
     data = {
         'states': states,
         'actions': actions,
+        'metrics': metrics,
         'lengths': lens,
         'rewards': rewards
     }

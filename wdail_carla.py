@@ -113,6 +113,17 @@ def train(args):
     device = torch.device('cuda:'+ str(cl_args.cuda) if torch.cuda.is_available() else 'cpu')
     # device = torch.device('cpu')
 
+    file_name = os.path.join(
+        args.gail_experts_dir, "trajs_{}.pt".format(
+            args.env_name.split('-')[0].lower()))
+
+    gail_train_loader = torch.utils.data.DataLoader(
+        ExpertDataset(
+        file_name, num_trajectories=args.num_trajs, subsample_frequency=args.subsample_frequency),
+        batch_size=args.gail_batch_size,
+        shuffle=True,
+        drop_last=True)
+
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, device, False)
 
@@ -121,6 +132,7 @@ def train(args):
     # network
     actor_critic = Policy(
         envs.observation_space.shape,
+        envs.metrics_space,
         envs.action_space,
         base_kwargs={'recurrent': args.recurrent_policy})
     actor_critic.to(device)
@@ -137,22 +149,13 @@ def train(args):
         max_grad_norm=args.max_grad_norm)
 
     # discriminator
-    discr = Discriminator(envs.action_space.shape[0], 100, device, args.reward_type, args.update_rms)
-
-    file_name = os.path.join(
-        args.gail_experts_dir, "trajs_{}.pt".format(
-            args.env_name.split('-')[0].lower()))
-
-    gail_train_loader = torch.utils.data.DataLoader(
-        ExpertDataset(
-        file_name, num_trajectories=args.num_trajs, subsample_frequency=args.subsample_frequency),
-        batch_size=args.gail_batch_size,
-        shuffle=True,
-        drop_last=True)
+    discr = Discriminator(envs.action_space.shape[0] + envs.metrics_space.shape[0], 100, device, args.reward_type, args.update_rms)
 
     # The buffer
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                              envs.observation_space.shape, envs.action_space,
+                              envs.observation_space.shape,
+                              envs.metrics_space.shape,
+                              envs.action_space,
                               actor_critic.recurrent_hidden_state_size)
 
     # The buffer for the expert -> refer to dataset/mujoco_dset.py

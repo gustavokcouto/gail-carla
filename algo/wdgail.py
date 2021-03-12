@@ -76,8 +76,10 @@ class Discriminator(nn.Module):
 
     def compute_grad_pen(self,
                          expert_state,
+                         expert_metrics,
                          expert_action,
                          policy_state,
+                         policy_metrics,
                          policy_action,
                          lambda_=10):
         alpha = torch.rand(expert_state.size(0), 1, 1, 1)
@@ -87,12 +89,17 @@ class Discriminator(nn.Module):
         mixup_state.requires_grad = True
 
         alpha = alpha.view(expert_state.size(0), 1)
+
+        alpha_metrics = alpha.expand_as(expert_metrics).to(expert_metrics.device)
+        mixup_metrics = alpha_metrics * expert_metrics + (1 - alpha_metrics) * policy_metrics
+        mixup_metrics.requires_grad = True
+
         alpha_action = alpha.expand_as(expert_action).to(expert_action.device)
         mixup_action = alpha_action * expert_action + (1 - alpha_action) * policy_action
         mixup_action.requires_grad = True
 
         mixup_state_features = self.state_encoder(mixup_state)
-        mixup_data = torch.cat([mixup_state_features, mixup_action], dim=1)
+        mixup_data = torch.cat([mixup_state_features, mixup_metrics, mixup_action], dim=1)
         disc = self.trunk(mixup_data)
         ones = torch.ones(disc.size()).to(disc.device)
         grad = autograd.grad(
@@ -106,8 +113,9 @@ class Discriminator(nn.Module):
         grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
 
-    def update(self, expert_loader, rollouts, obsfilt=None):
-        self.train()
+    def update(self, expert_loader, rollouts, obsfilt=None, metricsfilt=None):
+        self.trunk.train()
+        self.state_encoder.train()
 
         policy_data_generator = rollouts.feed_forward_generator(
             None, mini_batch_size=expert_loader.batch_size)
@@ -118,25 +126,30 @@ class Discriminator(nn.Module):
         n = 0
         for expert_batch, policy_batch in zip(expert_loader,
                                               policy_data_generator):
-            policy_state, policy_action = policy_batch[0], policy_batch[2]
+            policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[3]
             policy_state_features = self.state_encoder(policy_state)
             policy_d = self.trunk(
-                torch.cat([policy_state_features, policy_action], dim=1))
+                torch.cat([policy_state_features, policy_metrics, policy_action], dim=1))
 
-            expert_state, expert_action = expert_batch
+            expert_state, expert_metrics, expert_action = expert_batch
+
             expert_state = obsfilt(expert_state.numpy(), update=False)
             expert_state = torch.FloatTensor(expert_state).to(self.device)
+
+            expert_metrics = metricsfilt(expert_metrics.numpy(), update=False)
+            expert_metrics = torch.FloatTensor(expert_metrics).to(self.device)
+
             expert_action = expert_action.to(self.device)
             expert_state_features = self.state_encoder(expert_state)
             expert_d = self.trunk(
-                torch.cat([expert_state_features, expert_action], dim=1))
+                torch.cat([expert_state_features, expert_metrics, expert_action], dim=1))
 
             expert_loss = torch.mean(torch.tanh(expert_d)).to(self.device)
             policy_loss = torch.mean(torch.tanh(policy_d)).to(self.device)
 
             wd = expert_loss - policy_loss
-            grad_pen = self.compute_grad_pen(expert_state, expert_action,
-                                             policy_state, policy_action)
+            grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
+                                             policy_state, policy_metrics, policy_action)
 
             loss += (-wd + grad_pen).item()
             g_loss += (wd).item()
@@ -149,11 +162,12 @@ class Discriminator(nn.Module):
 
         return g_loss/n, gp/n, 0.0, loss / n
 
-    def predict_reward(self, state, action, gamma, masks, update_rms=True):
+    def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
         with torch.no_grad():
-            self.eval()
+            self.trunk.eval()
+            self.state_encoder.eval()
             state_features = self.state_encoder(state)
-            d = self.trunk(torch.cat([state_features, action], dim=1))
+            d = self.trunk(torch.cat([state_features, metrics, action], dim=1))
             if self.reward_type == 0:
                 s = torch.exp(d)
                 reward = s
@@ -233,4 +247,4 @@ class ExpertDataset(torch.utils.data.Dataset):
         traj_idx, i = self.get_idx[j]
 
         return self.trajectories['states'][traj_idx][i], self.trajectories[
-            'actions'][traj_idx][i]
+            'metrics'][traj_idx][i], self.trajectories['actions'][traj_idx][i]

@@ -13,7 +13,7 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, base=None, base_kwargs=None):
+    def __init__(self, obs_shape, metrics_space, action_space, base=None, base_kwargs=None):
         super(Policy, self).__init__()
         if base_kwargs is None:
             base_kwargs = {}
@@ -48,11 +48,11 @@ class Policy(nn.Module):
         """Size of rnn_hx."""
         return self.base.recurrent_hidden_state_size
 
-    def forward(self, inputs, rnn_hxs, masks):
+    def forward(self, obs, metrics, rnn_hxs, masks):
         raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+    def act(self, obs, metrics, rnn_hxs, masks, deterministic=False):
+        value, actor_features, rnn_hxs = self.base(obs, metrics, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -65,12 +65,12 @@ class Policy(nn.Module):
 
         return value, action, action_log_probs, rnn_hxs
 
-    def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs, rnn_hxs, masks)
+    def get_value(self, obs, metrics, rnn_hxs, masks):
+        value, _, _ = self.base(obs, metrics, rnn_hxs, masks)
         return value
 
-    def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+    def evaluate_actions(self, obs, metrics, rnn_hxs, masks, action):
+        value, actor_features, rnn_hxs = self.base(obs, metrics, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
@@ -173,11 +173,13 @@ class CNNBase(NNBase):
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
-        self.main = nn.Sequential(
+        self.image_encoder = nn.Sequential(
             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)), nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=2)), nn.ReLU(), Flatten(),
-            init_(nn.Linear(64 * 7 * 7, hidden_size)), nn.ReLU())
+            init_(nn.Conv2d(64, 32, 3, stride=2)), nn.ReLU(), Flatten())
+        
+        self.state_encoder = nn.Sequential(
+            init_(nn.Linear(64 * 7 * 7 + 2, hidden_size)), nn.ReLU())
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0))
@@ -186,8 +188,9 @@ class CNNBase(NNBase):
 
         self.train()
 
-    def forward(self, inputs, rnn_hxs, masks):
-        x = self.main(inputs)
+    def forward(self, obs, metrics, rnn_hxs, masks):
+        x = self.image_encoder(obs)
+        x = self.state_encoder(torch.cat([x, metrics], dim=1))
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)

@@ -57,8 +57,9 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
     i_update = 0
     dis_init = True
 
-    obs = envs.reset()
+    obs, metrics = envs.reset()
     rollouts.obs[0].copy_(obs)
+    rollouts.metrics[0].copy_(metrics)
     rollouts.to(device)
 
     write_result = utli.Write_Result(cl_args=cl_args)
@@ -83,13 +84,13 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                    rollouts.obs[step], rollouts.metrics[step], rollouts.recurrent_hidden_states[step],
                     rollouts.masks[step])
 
             # action, log_prob, value = model_step(cl_args=cl_args, model=model, state=cur_state, device=device)
             # time.sleep(.002)
             # next_state, reward, done, infos = envs.step(action)   # error 01
-            obs, reward, done, infos = envs.step(action)
+            obs, metrics, reward, done, infos = envs.step(action)
 
             for info in infos:
                 maybeepinfo = info.get('episode')
@@ -105,12 +106,12 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
             bad_masks = torch.FloatTensor(
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
                  for info in infos])
-            rollouts.insert(obs, recurrent_hidden_states, action,
+            rollouts.insert(obs, metrics, recurrent_hidden_states, action,
                             action_log_prob, value, reward, masks, bad_masks)
         print('finished sim')
         with torch.no_grad():
             next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
+                rollouts.obs[-1], rollouts.metrics[-1], rollouts.recurrent_hidden_states[-1],
                 rollouts.masks[-1]).detach()
 
         # gail
@@ -127,7 +128,7 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
                 # dis_loss, dis_gp, dis_entropy, dis_total_loss = \
                 #     discriminator.update_zm(replay_buf=rollouts, expert_buf=expert_buffer,
                 #                          obsfilt=utils.get_vec_normalize(envs)._obfilt, batch_size=cl_args.gail_batch_size)
-                dis_loss, dis_gp, dis_entropy, dis_total_loss = discriminator.update(gail_train_loader, rollouts, utils.get_vec_normalize(envs)._obfilt)
+                dis_loss, dis_gp, dis_entropy, dis_total_loss = discriminator.update(gail_train_loader, rollouts, utils.get_vec_normalize(envs)._obfilt, utils.get_vec_normalize(envs)._metricsfilt)
                 dis_losses.append(dis_loss)
                 dis_gps.append(dis_gp)
                 dis_entropys.append(dis_entropy)
@@ -151,7 +152,7 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
 
             for step in range(nbatch):
                 rollouts.rewards[step] = discriminator.predict_reward(
-                    rollouts.obs[step], rollouts.actions[step], cl_args.gamma,
+                    rollouts.obs[step], rollouts.metrics[step], rollouts.actions[step], cl_args.gamma,
                     rollouts.masks[step])
                 if rollouts.masks[step] == 0:
                     cum_gailrewards += rollouts.rewards[step].item()

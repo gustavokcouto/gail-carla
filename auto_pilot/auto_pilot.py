@@ -71,6 +71,5 @@ class AutoPilot():
 
         control = []
         control.append(steer + 1e-2 * np.random.randn())
-        control.append(throttle)
 
         return control

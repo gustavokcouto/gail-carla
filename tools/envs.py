@@ -78,9 +78,10 @@ class VecPyTorch(VecEnvWrapper):
         # TODO: Fix data types
 
     def reset(self):
-        obs = self.venv.reset()
+        obs, metrics = self.venv.reset()
         obs = torch.from_numpy(obs).float().to(self.device)
-        return obs
+        metrics = torch.from_numpy(metrics).float().to(self.device)
+        return obs, metrics
 
     def step_async(self, actions):
         if isinstance(actions, torch.LongTensor):
@@ -90,10 +91,11 @@ class VecPyTorch(VecEnvWrapper):
         self.venv.step_async(actions)
 
     def step_wait(self):
-        obs, reward, done, info = self.venv.step_wait()
+        obs, metrics, reward, done, info = self.venv.step_wait()
         obs = torch.from_numpy(obs).float().to(self.device)
+        metrics = torch.from_numpy(metrics).float().to(self.device)
         reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
-        return obs, reward, done, info
+        return obs, metrics, reward, done, info
 
 
 class VecNormalize(VecNormalize_):
@@ -101,6 +103,17 @@ class VecNormalize(VecNormalize_):
         super(VecNormalize, self).__init__(*args, **kwargs)
         self.training = True
 
+    def _metricsfilt(self, metrics, update=True):
+        if self.metrics_rms:
+            if self.training and update:
+                self.metrics_rms.update(metrics)
+            metrics = np.clip((metrics - self.metrics_rms.mean) /
+                          np.sqrt(self.metrics_rms.var + self.epsilon),
+                          -self.clipob, self.clipob)
+            return metrics
+        else:
+            return metrics
+    
     def _obfilt(self, obs, update=True):
         if self.ob_rms:
             if self.training and update:
