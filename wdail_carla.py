@@ -29,10 +29,8 @@ def argsparser():
     parser.add_argument('--cuda', help='num_model', type=int, default=0)
     parser.add_argument('--seed', help='seed', type=int, default=1)
     parser.add_argument('--use_linear_lr_decay', help='use linear lr decay', type=bool, default=True)
-    parser.add_argument('--recurrent-policy', action='store_true', default=False, help='use a recurrent policy')
 
     #ppo
-    parser.add_argument('--num_processes', help='num_processes', type=int, default=1)
     parser.add_argument('--num-steps', help='num-steps', type=int, default=1000)
     parser.add_argument('--lr', help='learning rate', type=float, default=3e-4)
     parser.add_argument('--batch_size', help='batch size', type=int, default=64)
@@ -45,7 +43,6 @@ def argsparser():
     parser.add_argument('--eps', type=float, default=1e-5, help='RMSprop optimizer epsilon (default: 1e-5)')
     parser.add_argument('--alpha', type=float, default=0.99, help='RMSprop optimizer apha (default: 0.99)')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for rewards (default: 0.99)')
-    parser.add_argument('--use-gae', action='store_true', default=True, help='use generalized advantage estimation')
     parser.add_argument('--gae-lambda', type=float, default=0.95, help='gae lambda parameter (default: 0.95)')
     parser.add_argument('--entropy-coef', type=float, default=0.00, help='entropy term coefficient (default: 0.01)')
     parser.add_argument('--value-loss-coef', type=float, default=0.5, help='value loss coefficient (default: 0.5)')
@@ -63,11 +60,9 @@ def argsparser():
     parser.add_argument('--num_trajs', help='num trajs', type=int, default=4)
     parser.add_argument('--subsample_frequency', help='num trajs', type=int, default=1)
     parser.add_argument('--adversary_entcoeff', help='entropy coefficiency of discriminator', type=float, default=1e-3)
-    parser.add_argument('--use-proper-time-limits', action='store_true', default=True, help='compute returns taking into account time limits')
     parser.add_argument('--log-interval', type=int, default=1, help='log interval, one log per n updates (default: 10)')
 
     parser.add_argument('--reward_type', type=int, default=0, help='0,1,2,3,4')
-    parser.add_argument('--update_rms', type=bool, default=False, help='False or True')
 
 
     return parser.parse_args()
@@ -80,10 +75,9 @@ def train(args):
     from tools.model import Policy
 
     from algo.wdgail import Discriminator, ExpertDataset
-    from algo.mujoco_dset_zm_iko import Mujoco_Dset
 
     from tools.learn import gailLearning_mujoco_origin
-    from tools.envs import make_vec_envs
+    from carla_env import CarlaEnv
 
     from tools import utli
     from tools import utils
@@ -124,17 +118,13 @@ def train(args):
         shuffle=True,
         drop_last=True)
 
-    envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, device, False)
-
-    envs_eval = []
+    env = CarlaEnv()
 
     # network
     actor_critic = Policy(
-        envs.observation_space.shape,
-        envs.metrics_space,
-        envs.action_space,
-        base_kwargs={'recurrent': args.recurrent_policy})
+        env.observation_space.shape,
+        env.metrics_space,
+        env.action_space)
     actor_critic.to(device)
 
     agent = PPO(
@@ -149,23 +139,16 @@ def train(args):
         max_grad_norm=args.max_grad_norm)
 
     # discriminator
-    discr = Discriminator(envs.action_space.shape[0] + envs.metrics_space.shape[0], 100, device, args.reward_type, args.update_rms)
+    discr = Discriminator(env.action_space.shape[0] + env.metrics_space.shape[0], 100, device, args.reward_type)
 
     # The buffer
-    rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                              envs.observation_space.shape,
-                              envs.metrics_space.shape,
-                              envs.action_space,
-                              actor_critic.recurrent_hidden_state_size)
-
-    # The buffer for the expert -> refer to dataset/mujoco_dset.py
-    # expert_path = cl_args.expert_path+cl_args.env_id+".h5"
-    # expert_buffer = Mujoco_Dset(cl_args.expert_path, traj_limitation=cl_args.num_trajs, subsample_frequency=20)
-
+    rollouts = RolloutStorage(args.num_steps,
+                              env.observation_space.shape,
+                              env.metrics_space.shape,
+                              env.action_space)
 
     model = gailLearning_mujoco_origin(cl_args=cl_args,
-                                       envs=envs,
-                                       envs_eval=envs_eval,
+                                       env=env,
                                        actor_critic=actor_critic,
                                        agent=agent,
                                        discriminator=discr,
