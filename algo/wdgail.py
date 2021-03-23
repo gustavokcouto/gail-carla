@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import torch.utils.data
 from torch import autograd
 
-from common.running_mean_std import RunningMeanStd
 from tools.utils import init
 from tools.model import Flatten
 
@@ -43,19 +42,18 @@ class Dset(object):
         return inputs, labels
 
 class Discriminator(nn.Module):
-    def __init__(self, input_dim, hidden_dim, device, reward_type, update_rms, cliprew_down=-10.0, cliprew_up=10.0):
+    def __init__(self, input_dim, hidden_dim, device, reward_type, cliprew_down=-10.0, cliprew_up=10.0):
         super(Discriminator, self).__init__()
         self.cliprew_down = cliprew_down
         self.cliprew_up = cliprew_up
         self.device = device
         self.reward_type = reward_type
-        self.update_rms = update_rms
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
         self.state_encoder = nn.Sequential(
-            init_(nn.Conv2d(3, 32, 8, stride=4)), nn.ReLU(),
+            init_(nn.Conv2d(9, 32, 8, stride=4)), nn.ReLU(),
             init_(nn.Conv2d(32, 32, 4, stride=4)), nn.ReLU(),
             init_(nn.Conv2d(32, 16, 3, stride=2)), nn.ReLU(), Flatten()
         ).to(device)
@@ -72,7 +70,6 @@ class Discriminator(nn.Module):
         self.optimizer = torch.optim.Adam(disc_params)
 
         self.returns = None
-        self.ret_rms = RunningMeanStd(shape=())
 
     def compute_grad_pen(self,
                          expert_state,
@@ -113,7 +110,7 @@ class Discriminator(nn.Module):
         grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
 
-    def update(self, expert_loader, rollouts, obsfilt=None, metricsfilt=None):
+    def update(self, expert_loader, rollouts):
         self.trunk.train()
         self.state_encoder.train()
 
@@ -126,17 +123,15 @@ class Discriminator(nn.Module):
         n = 0
         for expert_batch, policy_batch in zip(expert_loader,
                                               policy_data_generator):
-            policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[3]
+            policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[2]
             policy_state_features = self.state_encoder(policy_state)
             policy_d = self.trunk(
                 torch.cat([policy_state_features, policy_metrics, policy_action], dim=1))
 
             expert_state, expert_metrics, expert_action = expert_batch
 
-            expert_state = obsfilt(expert_state.numpy(), update=False)
             expert_state = torch.FloatTensor(expert_state).to(self.device)
 
-            expert_metrics = metricsfilt(expert_metrics.numpy(), update=False)
             expert_metrics = torch.FloatTensor(expert_metrics).to(self.device)
 
             expert_action = expert_action.to(self.device)
@@ -162,7 +157,7 @@ class Discriminator(nn.Module):
 
         return g_loss/n, gp/n, 0.0, loss / n
 
-    def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
+    def predict_reward(self, state, metrics, action, gamma, masks):
         with torch.no_grad():
             self.trunk.eval()
             self.state_encoder.eval()
@@ -189,12 +184,7 @@ class Discriminator(nn.Module):
             if self.returns is None:
                 self.returns = reward.clone()
 
-            if self.update_rms:
-                self.returns = self.returns * masks * gamma + reward
-                self.ret_rms.update(self.returns.cpu().numpy())
-                return reward / np.sqrt(self.ret_rms.var[0] + 1e-8)
-            else:
-                return reward
+            return reward
 
 class ExpertDataset(torch.utils.data.Dataset):
     def __init__(self, file_name, num_trajectories=4, subsample_frequency=20):

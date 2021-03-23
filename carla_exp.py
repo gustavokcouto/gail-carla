@@ -18,7 +18,6 @@ from auto_pilot.auto_pilot import AutoPilot
 from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
 
-SAVE_PATH = Path('data/carla')
 FRAME_SKIP = 1
 EPISODE_LENGTH = 800
 
@@ -45,10 +44,6 @@ def gen_trajectories(file_path=''):
         actions_ep = []
         rewards_ep = []
 
-        (SAVE_PATH/('%02d' % episode)).mkdir(exist_ok=True)
-        # (SAVE_PATH/('%02d' % episode)/'rgb').mkdir(exist_ok=True)
-
-        measurements = list()
         obs, step_metrics = env.reset()
         auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
         for step in tqdm.tqdm(range(EPISODE_LENGTH * FRAME_SKIP)):
@@ -66,15 +61,6 @@ def gen_trajectories(file_path=''):
                 states_ep.append(obs)
                 actions_ep.append(action)
 
-                # i = step // FRAME_SKIP
-                # rgb = obs.pop('rgb')
-                # Image.fromarray(rgb).save(SAVE_PATH/('%02d' % episode)/'rgb'/('%04d.png' % i))
-                step_measurements = env.info
-                step_measurements.update({
-                    'steer': action[0],
-                })
-                measurements.append(step_measurements)
-                
             obs, step_metrics, reward, _, _ = env.step(action)
         metrics_ep.append(step_metrics)
         reward = 0
@@ -87,16 +73,6 @@ def gen_trajectories(file_path=''):
         metrics.append(metrics_ep)
         lens.append(len(actions_ep))
 
-        # i = (EPISODE_LENGTH * FRAME_SKIP) // FRAME_SKIP
-        # rgb = obs.pop('rgb')
-        # Image.fromarray(rgb).save(SAVE_PATH/('%02d' % episode)/'rgb'/('%04d.png' % i))
-        step_measurements = env.info
-        step_measurements.update({
-            'steer': action[0],
-        })
-        measurements.append(step_measurements)
-        pd.DataFrame(measurements).to_csv(SAVE_PATH/('%02d' % episode)/'measurements.csv', index=False)
-    
     states = torch.as_tensor(states).float()
     metrics = torch.as_tensor(metrics).float()
     actions = torch.as_tensor(actions).float()

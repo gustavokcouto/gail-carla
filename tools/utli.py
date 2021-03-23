@@ -190,12 +190,11 @@ def Log_save_name(cl_args):
 def Log_save_name4gail(cl_args):
 
     save_name = cl_args.algo + '_' + cl_args.env_name + \
-                '_seed_{}_num_trajs_{}_subsample_frequency_{}_reward_type_{}_update_rms_{}_gail_{}_{}_{}_{}'\
+                '_seed_{}_num_trajs_{}_subsample_frequency_{}_reward_type_{}_gail_{}_{}_{}_{}'\
                     .format(cl_args.seed,
                             cl_args.num_trajs,
                             cl_args.subsample_frequency,
                             cl_args.reward_type,
-                            int(cl_args.update_rms),
                             cl_args.gail_batch_size,
                             cl_args.gail_thre,
                             cl_args.gail_pre_epoch,

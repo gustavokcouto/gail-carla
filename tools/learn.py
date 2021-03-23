@@ -6,13 +6,14 @@ import numpy as np
 from collections import deque
 import time
 from tools import utils, utli
+from carla_env import CarlaEnv
 
 
 def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
 
 
-def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, discriminator, rollouts, gail_train_loader, device, utli):
+def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator, rollouts, gail_train_loader, device, utli):
 
     log_save_name = utli.Log_save_name4gail(cl_args)
     log_save_path = os.path.join("./runs", log_save_name)
@@ -35,7 +36,6 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
     count = 0
 
     # begin optimize
-
     nsteps = cl_args.num_steps
     S_time = time.time()
 
@@ -57,7 +57,11 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
     i_update = 0
     dis_init = True
 
-    obs, metrics = envs.reset()
+    obs, metrics = env.reset()
+    obs = torch.from_numpy(obs).float().to(device)
+    obs = torch.stack([obs])
+    metrics = torch.from_numpy(metrics).float().to(device)
+    metrics = torch.stack([metrics])
     rollouts.obs[0].copy_(obs)
     rollouts.metrics[0].copy_(metrics)
     rollouts.to(device)
@@ -83,41 +87,42 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
 
             # Sample actions
             with torch.no_grad():
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step], rollouts.metrics[step], rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step])
+                value, action, action_log_prob = actor_critic.act(
+                    rollouts.obs[step], rollouts.metrics[step], rollouts.masks[step])
 
-            # action, log_prob, value = model_step(cl_args=cl_args, model=model, state=cur_state, device=device)
-            # time.sleep(.002)
-            # next_state, reward, done, infos = envs.step(action)   # error 01
-            obs, metrics, reward, done, infos = envs.step(action)
+            obs, metrics, reward, done, info = env.step(action)
+            obs = torch.from_numpy(obs).float().to(device)
+            obs = torch.stack([obs])
+            metrics = torch.from_numpy(metrics).float().to(device)
+            metrics = torch.stack([metrics])
+            reward = torch.from_numpy(reward).float()
 
-            for info in infos:
-                maybeepinfo = info.get('episode')
-                if maybeepinfo:
-                    epinfos.append(maybeepinfo)
-            for info in infos:
-                if 'episode' in info.keys():
-                    episode_rewards.append(info['episode']['r'])
+            maybeepinfo = info.get('episode')
+            if maybeepinfo:
+                epinfos.append(maybeepinfo)
+            if 'episode' in info.keys():
+                episode_rewards.append(info['episode']['r'])
 
             # If done then clean the history of observations.
-            masks = torch.FloatTensor(
-                [[0.0] if done_ else [1.0] for done_ in done])
-            bad_masks = torch.FloatTensor(
-                [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                 for info in infos])
-            rollouts.insert(obs, metrics, recurrent_hidden_states, action,
-                            action_log_prob, value, reward, masks, bad_masks)
+            if done:
+                mask = torch.FloatTensor([1.0])
+                obs, metrics = env.reset()
+                obs = torch.from_numpy(obs).float()
+                obs = torch.stack([obs])
+                metrics = torch.from_numpy(metrics).float()
+                metrics = torch.stack([metrics])
+            else:
+                mask = torch.FloatTensor([0.0])
+            rollouts.insert(obs, metrics, action, action_log_prob, value, reward, mask)
         print('finished sim')
         with torch.no_grad():
             next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.metrics[-1], rollouts.recurrent_hidden_states[-1],
-                rollouts.masks[-1]).detach()
+                rollouts.obs[-1], rollouts.metrics[-1], rollouts.masks[-1]).detach()
 
         # gail
         if cl_args.gail:
-            if i_update >= cl_args.gail_thre:
-                envs.venv.eval()
+            # if i_update >= cl_args.gail_thre:
+            #     envs.venv.eval()
             # gail_epoch = args.gail_epoch
             gail_epoch = cl_args.gail_epoch
             if i_update < cl_args.gail_thre:
@@ -125,10 +130,8 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
 
             dis_losses, dis_gps, dis_entropys, dis_total_losses = [], [], [], []
             for _ in range(gail_epoch):
-                # dis_loss, dis_gp, dis_entropy, dis_total_loss = \
-                #     discriminator.update_zm(replay_buf=rollouts, expert_buf=expert_buffer,
-                #                          obsfilt=utils.get_vec_normalize(envs)._obfilt, batch_size=cl_args.gail_batch_size)
-                dis_loss, dis_gp, dis_entropy, dis_total_loss = discriminator.update(gail_train_loader, rollouts, utils.get_vec_normalize(envs)._obfilt, utils.get_vec_normalize(envs)._metricsfilt)
+
+                dis_loss, dis_gp, dis_entropy, dis_total_loss = discriminator.update(gail_train_loader, rollouts)
                 dis_losses.append(dis_loss)
                 dis_gps.append(dis_gp)
                 dis_entropys.append(dis_entropy)
@@ -161,8 +164,7 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
                     cum_gailrewards=.0
 
         # compute returns
-        rollouts.compute_returns(next_value, cl_args.use_gae, cl_args.gamma,
-                                 cl_args.gae_lambda, cl_args.use_proper_time_limits)
+        rollouts.compute_returns(next_value, cl_args.gamma, cl_args.gae_lambda)
 
         # training PPO policy
 
@@ -198,7 +200,7 @@ def gailLearning_mujoco_origin(cl_args, envs, envs_eval, actor_critic, agent, di
             % (episode_t, time_step, eplenmean, eprewmean, np.mean(np.array(epgailbuf))))
 
         if i_update % cl_args.log_interval == 0 and len(episode_rewards) > 1:
-            total_num_steps = (i_update + 1) * cl_args.num_processes * cl_args.num_steps
+            total_num_steps = (i_update + 1) * cl_args.num_steps
             end = time.time()
             print(
                 "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
