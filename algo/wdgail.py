@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import torch.utils.data
 from torch import autograd
 
+from common.running_mean_std import RunningMeanStd
 from tools.utils import init
 from tools.model import Flatten
 
@@ -42,12 +43,13 @@ class Dset(object):
         return inputs, labels
 
 class Discriminator(nn.Module):
-    def __init__(self, input_dim, hidden_dim, device, reward_type, cliprew_down=-10.0, cliprew_up=10.0):
+    def __init__(self, input_dim, hidden_dim, device, reward_type, update_rms, cliprew_down=-10.0, cliprew_up=10.0):
         super(Discriminator, self).__init__()
         self.cliprew_down = cliprew_down
         self.cliprew_up = cliprew_up
         self.device = device
         self.reward_type = reward_type
+        self.update_rms = update_rms
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
@@ -70,6 +72,7 @@ class Discriminator(nn.Module):
         self.optimizer = torch.optim.Adam(disc_params)
 
         self.returns = None
+        self.ret_rms = RunningMeanStd(shape=())
 
     def compute_grad_pen(self,
                          expert_state,
@@ -184,7 +187,12 @@ class Discriminator(nn.Module):
             if self.returns is None:
                 self.returns = reward.clone()
 
-            return reward
+            if self.update_rms:
+                self.returns = self.returns * masks * gamma + reward
+                self.ret_rms.update(self.returns.cpu().numpy())
+                return reward / np.sqrt(self.ret_rms.var[0] + 1e-8)
+            else:
+                return reward
 
 class ExpertDataset(torch.utils.data.Dataset):
     def __init__(self, file_name, num_trajectories=4, subsample_frequency=20):

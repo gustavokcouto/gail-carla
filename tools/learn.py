@@ -105,14 +105,14 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
 
             # If done then clean the history of observations.
             if done:
-                mask = torch.FloatTensor([1.0])
+                mask = torch.FloatTensor([0.0])
                 obs, metrics = env.reset()
                 obs = torch.from_numpy(obs).float()
                 obs = torch.stack([obs])
                 metrics = torch.from_numpy(metrics).float()
                 metrics = torch.stack([metrics])
             else:
-                mask = torch.FloatTensor([0.0])
+                mask = torch.FloatTensor([1.0])
             rollouts.insert(obs, metrics, action, action_log_prob, value, reward, mask)
         print('finished sim')
         with torch.no_grad():

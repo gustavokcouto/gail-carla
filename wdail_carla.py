@@ -63,7 +63,7 @@ def argsparser():
     parser.add_argument('--log-interval', type=int, default=1, help='log interval, one log per n updates (default: 10)')
 
     parser.add_argument('--reward_type', type=int, default=0, help='0,1,2,3,4')
-
+    parser.add_argument('--update_rms', type=bool, default=False, help='False or True')
 
     return parser.parse_args()
 
@@ -77,6 +77,7 @@ def train(args):
     from algo.wdgail import Discriminator, ExpertDataset
 
     from tools.learn import gailLearning_mujoco_origin
+    from learn_bc import learn_bc
     from carla_env import CarlaEnv
 
     from tools import utli
@@ -127,6 +128,8 @@ def train(args):
         env.action_space)
     actor_critic.to(device)
 
+    learn_bc(actor_critic, env, device, gail_train_loader)
+
     agent = PPO(
         actor_critic,
         args.clip_param,
@@ -139,7 +142,7 @@ def train(args):
         max_grad_norm=args.max_grad_norm)
 
     # discriminator
-    discr = Discriminator(env.action_space.shape[0] + env.metrics_space.shape[0], 100, device, args.reward_type)
+    discr = Discriminator(env.action_space.shape[0] + env.metrics_space.shape[0], 100, device, args.reward_type, args.update_rms)
 
     # The buffer
     rollouts = RolloutStorage(args.num_steps,
