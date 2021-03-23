@@ -23,29 +23,21 @@ expert_loader = torch.utils.data.DataLoader(
     file_name,
     num_trajectories=4,
     subsample_frequency=1),
-    batch_size=512,
+    batch_size=128,
     shuffle=True,
     drop_last=True
 )
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-action_space = spaces.Box(low=-10, high=10,
-                                       shape=(1,), dtype=np.float32)
+carla_env = CarlaEnv()
 
-observation_space = spaces.Box(low=0, high=255,
-                                        shape=(3,144,256), dtype=np.uint8)
-
-metrics_space = spaces.Box(low=-100, high=100,
-                                        shape=(2,), dtype=np.float32)
-
-actor_critic = Policy(observation_space.shape, metrics_space, action_space)
+actor_critic = Policy(carla_env.observation_space.shape, carla_env.metrics_space, carla_env.action_space)
 actor_critic.to(device)
 
 optimizer = optim.Adam(actor_critic.parameters(), lr=3e-4, eps=1e-5)
 
 episodes = 100000
-carla_env = CarlaEnv()
 eval_step = 1000
 ent_weight = 1e-3
 time_step = 0
