@@ -23,7 +23,7 @@ expert_loader = torch.utils.data.DataLoader(
     file_name,
     num_trajectories=4,
     subsample_frequency=1),
-    batch_size=128,
+    batch_size=512,
     shuffle=True,
     drop_last=True
 )
@@ -57,12 +57,12 @@ for episode in tqdm.tqdm(range(episodes)):
         expert_action_batch = expert_action_batch.to(device)
 
         # Reshape to do in a single forward pass for all steps
-        done, action_log_probs, entropy, _ = actor_critic.evaluate_actions(exp_obs_batch, exp_metrics_batch, None, None, expert_action_batch)
+        done, action_log_probs, entropy = actor_critic.evaluate_actions(exp_obs_batch, exp_metrics_batch, None, expert_action_batch)
 
         log_prob = action_log_probs.mean()
         loss = -log_prob + ent_weight * entropy
 
-        writer.add_scalar('loss', loss, episode)
+        writer.add_scalar('loss', loss, time_step)
         time_step += 1
         optimizer.zero_grad()
         loss.backward()
@@ -75,10 +75,10 @@ for episode in tqdm.tqdm(range(episodes)):
         for step in range(steps):
             state = torch.FloatTensor([obs]).to(device)
             metrics = torch.FloatTensor([metrics]).to(device)
-            _, action, _, _ = actor_critic.act(state, metrics, None, None, deterministic=True)
+            _, action, _ = actor_critic.act(state, metrics, None, deterministic=True)
             obs, metrics, _, done, _ = carla_env.step(action.cpu().detach().numpy()[0])
             if done and not episode_done:
-                writer.add_scalar('time_steps', step, episode)
+                writer.add_scalar('time_steps', step, time_step)
                 episode_done = True
 
 while True:
@@ -87,7 +87,7 @@ while True:
     for _ in range(steps):
         state = torch.FloatTensor([obs]).to(device)
         metrics = torch.FloatTensor([metrics]).to(device)
-        _, action, _, _ = actor_critic.act(state, metrics, None, None, deterministic=True)
+        _, action, _ = actor_critic.act(state, metrics, None, deterministic=True)
         obs, metrics, _, done, _ = carla_env.step(action.cpu().detach().numpy()[0])
         if done:
             break

@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 from pathlib import Path
 from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
-from auto_pilot.planner import RoutePlanner
+from auto_pilot.planner import RoutePlanner, Plotter
 from auto_pilot.route_manipulation import downsample_route
 from auto_pilot.pid_controller import PIDController
 
@@ -206,6 +206,7 @@ class CarlaEnv(gym.Env):
 
         self._spawn_player(self.start_pose)
         self._setup_sensors()
+        self.debug = Plotter(259, gps=True)
 
     def _spawn_player(self, start_pose):
         vehicle_bp = np.random.choice(self._blueprints.filter(VEHICLE_NAME))
@@ -230,10 +231,7 @@ class CarlaEnv(gym.Env):
         ego_col.listen(lambda colli: self.col_callback(colli))
         self.collision_sensor = ego_col
 
-        ds_ids = downsample_route(self.global_plan_world_coord, 50)
-        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
-
-        self._command_planner.set_route(global_plan_gps, True)
+        self._command_planner.set_route(self.global_plan_gps, True)
 
     def clean_simulator(self):
         self._time_start = time.time()
@@ -281,10 +279,7 @@ class CarlaEnv(gym.Env):
             self.reset_player()
             self.step(None)
 
-        ds_ids = downsample_route(self.global_plan_world_coord, 50)
-        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
-
-        self._command_planner.set_route(global_plan_gps, True)
+        self._command_planner.set_route(self.global_plan_gps, True)
 
         for x in self._actor_dict['camera']:
             x.get()
@@ -344,7 +339,7 @@ class CarlaEnv(gym.Env):
         gps = result['gnss']
         compass = result['imu'][-1]
 
-        far_node, command = self._command_planner.run_step(gps)
+        far_node, _ = self._command_planner.run_step(gps)
 
         rotation_matrix = np.array([
             [np.cos(compass), -np.sin(compass)],
@@ -353,13 +348,19 @@ class CarlaEnv(gym.Env):
 
         target = rotation_matrix.T.dot(far_node - gps)
         # metrics = np.concatenate(([speed], target))
+        self.debug.clear()
+        origin = np.array([0, 0])
+        self.debug.dot(origin, target, (255, 0, 0))
+        self.debug.dot(origin, origin, (0, 0, 255))
+        self.debug.show()
+
         metrics = target * 1000
         obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
 
         self.cur_length += 1
         reward = np.array(0)
         done = False
-        transform_x = transform.location.x
+
         info = {
             'x': transform.location.x,
             'y': transform.location.y,

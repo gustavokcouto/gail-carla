@@ -4,7 +4,7 @@ from collections import deque
 import numpy as np
 
 
-DEBUG = False
+DEBUG = True
 
 
 class Plotter(object):
