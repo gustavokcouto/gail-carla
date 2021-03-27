@@ -157,7 +157,7 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
                 rollouts.rewards[step] = discriminator.predict_reward(
                     rollouts.obs[step], rollouts.metrics[step], rollouts.actions[step], cl_args.gamma,
                     rollouts.masks[step])
-                if rollouts.masks[step] == 0:
+                if rollouts.masks[step] == 1:
                     cum_gailrewards += rollouts.rewards[step].item()
                 else:
                     epgailbuf.append(cum_gailrewards)
