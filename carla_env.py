@@ -231,10 +231,7 @@ class CarlaEnv(gym.Env):
         ego_col.listen(lambda colli: self.col_callback(colli))
         self.collision_sensor = ego_col
 
-        ds_ids = downsample_route(self.global_plan_world_coord, 50)
-        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
-
-        self._command_planner.set_route(global_plan_gps, True)
+        self._command_planner.set_route(self.global_plan_gps, True)
 
     def clean_simulator(self):
         self._time_start = time.time()
@@ -282,10 +279,7 @@ class CarlaEnv(gym.Env):
             self.reset_player()
             self.step(None)
 
-        ds_ids = downsample_route(self.global_plan_world_coord, 50)
-        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
-
-        self._command_planner.set_route(global_plan_gps, True)
+        self._command_planner.set_route(self.global_plan_gps, True)
 
         for x in self._actor_dict['camera']:
             x.get()

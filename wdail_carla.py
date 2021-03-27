@@ -128,7 +128,7 @@ def train(args):
         env.action_space)
     actor_critic.to(device)
 
-    learn_bc(actor_critic, env, device, gail_train_loader)
+    # learn_bc(actor_critic, env, device, gail_train_loader)
 
     agent = PPO(
         actor_critic,
