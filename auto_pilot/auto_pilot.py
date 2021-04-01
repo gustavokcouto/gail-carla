@@ -70,6 +70,7 @@ class AutoPilot():
         steer, throttle = self._get_control(near_node, far_node, position, observation[3], observation[2])
 
         control = []
-        control.append(steer + 1e-2 * np.random.randn())
+        steer = np.clip(steer + 1e-2 * np.random.randn(), -1.0, 1.0)
+        control.append(steer)
 
         return control

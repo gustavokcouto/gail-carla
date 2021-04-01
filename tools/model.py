@@ -11,13 +11,13 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, metrics_space, action_space):
+    def __init__(self, obs_shape, metrics_space, action_space, activation=None):
         super(Policy, self).__init__()
 
-        self.base = CNNBase(metrics_space.shape[0])
+        self.base = CNNBase(obs_shape, metrics_space)
 
         num_outputs = action_space.shape[0]
-        self.dist = DiagGaussian(self.base.output_size, num_outputs)
+        self.dist = DiagGaussian(self.base.output_size, num_outputs, activation=activation)
 
     def act(self, obs, metrics, masks, deterministic=False):
         value, actor_features = self.base(obs, metrics, masks)
@@ -47,68 +47,46 @@ class Policy(nn.Module):
         return value, action_log_probs, dist_entropy
 
 
-# class CNNBase(nn.Module):
-#     def __init__(self, num_inputs, hidden_size=512):
-#         super(CNNBase, self).__init__()
-
-#         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-#                                constant_(x, 0), nn.init.calculate_gain('relu'))
-
-#         self.image_encoder = nn.Sequential(
-#             init_(nn.Conv2d(num_inputs, 32, 8, stride=4)), nn.ReLU(),
-#             init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-#             init_(nn.Conv2d(64, 32, 3, stride=2)), nn.ReLU(), Flatten())
-        
-#         self.state_encoder = nn.Sequential(
-#             init_(nn.Linear(64 * 7 * 7 + 2, hidden_size)), nn.ReLU())
-
-#         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-#                                constant_(x, 0))
-
-#         self.critic_linear = init_(nn.Linear(hidden_size, 1))
-#         self._hidden_size = hidden_size
-
-#         self.train()
-
-#     def forward(self, obs, metrics, masks):
-#         x = self.image_encoder(obs)
-#         x = self.state_encoder(torch.cat([x, metrics], dim=1))
-
-#         return self.critic_linear(x), x
-
-#     @property
-#     def output_size(self):
-#         return self._hidden_size
-
-
 class CNNBase(nn.Module):
-    def __init__(self, num_inputs, hidden_size=64):
+    def __init__(self, obs_shape, metrics_space, hidden_size=512):
         super(CNNBase, self).__init__()
 
+        C, H, W = obs_shape
+
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), np.sqrt(2))
+                               constant_(x, 0), nn.init.calculate_gain('relu'))
 
-        self.actor = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+        self.main = nn.Sequential(
+            init_(nn.Conv2d(C, 32, 4, stride=2)), nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
+            init_(nn.Conv2d(64, 128, 4, stride=2)), nn.ReLU(),
+            init_(nn.Conv2d(128, 256, 4, stride=2)), nn.ReLU(), Flatten())
 
-        self.critic = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+        for i in range(4):
+            H = (H - 4)//2 + 1
+            W = (W - 4)//2 + 1
+        # Get image dim
+        img_dim = 256*H*W
+
+
+        self.trunk = nn.Sequential(
+            init_(nn.Linear(metrics_space.shape[0] + img_dim, hidden_size)), nn.ReLU(),
+            init_(nn.Linear(hidden_size, hidden_size)), nn.ReLU(),
+        )
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0))
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
-
         self._hidden_size = hidden_size
 
         self.train()
 
     def forward(self, obs, metrics, masks):
-        x = metrics
+        x = self.main(obs)
+        x = self.trunk(torch.cat([x, metrics], dim=1))
 
-        hidden_critic = self.critic(x)
-        hidden_actor = self.actor(x)
-
-        return self.critic_linear(hidden_critic), hidden_actor
+        return self.critic_linear(x), x
 
     @property
     def output_size(self):

@@ -156,7 +156,7 @@ class IMU(object):
 class CarlaEnv(gym.Env):
     def __init__(self, town='Town01', port=2000):
         super(CarlaEnv, self).__init__()
-        self._client = carla.Client('localhost', port)
+        self._client = carla.Client('192.168.0.5', port)
         self._client.set_timeout(30.0)
 
         set_sync_mode(self._client, False)
@@ -231,7 +231,10 @@ class CarlaEnv(gym.Env):
         ego_col.listen(lambda colli: self.col_callback(colli))
         self.collision_sensor = ego_col
 
-        self._command_planner.set_route(self.global_plan_gps, True)
+        ds_ids = downsample_route(self.global_plan_world_coord, 50)
+        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
+
+        self._command_planner.set_route(global_plan_gps, True)
 
     def clean_simulator(self):
         self._time_start = time.time()
@@ -279,7 +282,10 @@ class CarlaEnv(gym.Env):
             self.reset_player()
             self.step(None)
 
-        self._command_planner.set_route(self.global_plan_gps, True)
+        ds_ids = downsample_route(self.global_plan_world_coord, 50)
+        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
+
+        self._command_planner.set_route(global_plan_gps, True)
 
         for x in self._actor_dict['camera']:
             x.get()
