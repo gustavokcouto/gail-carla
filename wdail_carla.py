@@ -46,8 +46,8 @@ def argsparser():
     # parser.add_argument('--expert_path', help='trajs path', type=str, default='../data/baseline/deterministic.trpo.HalfCheetah.0.00.npz')
     parser.add_argument('--expert_path', help='trajs path', type=str, default='../data/ikostirkov/trajs_ant.h5')
     parser.add_argument('--gail-experts-dir',default='./gail_experts', help='directory that contains expert demonstrations for gail')
-    parser.add_argument('--gail_batch_size', type=int, default=64, help='gail batch size (default: 128)')
-    parser.add_argument('--gail_epoch', help='number of steps to train discriminator in each epoch', type=int, default=10)
+    parser.add_argument('--gail_batch_size', type=int, default=128, help='gail batch size (default: 128)')
+    parser.add_argument('--gail_epoch', help='number of steps to train discriminator in each epoch', type=int, default=5)
     parser.add_argument('--num_trajs', help='num trajs', type=int, default=4)
     parser.add_argument('--subsample_frequency', help='num trajs', type=int, default=1)
     parser.add_argument('--log-interval', type=int, default=1, help='log interval, one log per n updates (default: 10)')
@@ -55,7 +55,7 @@ def argsparser():
     parser.add_argument('--bcgail', type=int, default=0)
     parser.add_argument('--decay', type=float, default=0.99)
     parser.add_argument('--gailgamma', type=float, default=0.125)
-    parser.add_argument('--use_activation', default=1, type=int, help='Use final activation? (Useful for certain scenarios)')
+    parser.add_argument('--use_activation', default=0, type=int, help='Use final activation? (Useful for certain scenarios)')
     return parser.parse_args()
 
 def train(args):
@@ -100,6 +100,7 @@ def train(args):
 
     env = CarlaEnv()
 
+    activation = None
     if args.use_activation:
         activation = torch.tanh
 
