@@ -54,6 +54,9 @@ class Discriminator(nn.Module):
                          policy_metrics,
                          policy_action,
                          lambda_=10):
+        grad_pen = 0
+        if True:
+            alpha = torch.rand(expert_state.size(0), 1)
 
         # Change state values
         alpha = torch.rand(expert_state.size(0), 1, 1, 1)
@@ -71,22 +74,24 @@ class Discriminator(nn.Module):
         mixup_action = alpha_action * expert_action + (1 - alpha_action) * policy_action
         mixup_action.requires_grad = True
 
-        mixup_state_features = self.main(mixup_state)
+            expert_data = torch.cat([exp_state, expert_metrics, expert_action], dim=1)
+            policy_data = torch.cat([pol_state, policy_metrics, policy_action], dim=1)
 
-        mixup_data = torch.cat([mixup_state_features, mixup_metrics, mixup_action], dim=1)
+            alpha = alpha.expand_as(expert_data).to(expert_data.device)
 
-        disc = self.trunk(mixup_data)
-        ones = torch.ones(disc.size()).to(disc.device)
+            mixup_data = alpha * expert_data + (1 - alpha) * policy_data
 
-        grad = autograd.grad(
-            outputs=disc,
-            inputs=(mixup_state, mixup_metrics, mixup_action),
-            grad_outputs=ones,
-            create_graph=True,
-            retain_graph=True,
-            only_inputs=True)[0]
+            disc = self.trunk(mixup_data)
+            ones = torch.ones(disc.size()).to(disc.device)
+            grad = autograd.grad(
+                outputs=disc,
+                inputs=mixup_data,
+                grad_outputs=ones,
+                create_graph=True,
+                retain_graph=True,
+                only_inputs=True)[0]
 
-        grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
+            grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
 
     def update(self, expert_loader, rollouts, obsfilt=None):

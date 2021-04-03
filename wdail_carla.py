@@ -55,7 +55,7 @@ def argsparser():
     parser.add_argument('--bcgail', type=int, default=0)
     parser.add_argument('--decay', type=float, default=0.99)
     parser.add_argument('--gailgamma', type=float, default=0.125)
-    parser.add_argument('--use_activation', default=1, type=int, help='Use final activation? (Useful for certain scenarios)')
+    parser.add_argument('--use_activation', default=0, type=int, help='Use final activation? (Useful for certain scenarios)')
     return parser.parse_args()
 
 def train(args):
@@ -100,6 +100,7 @@ def train(args):
 
     env = CarlaEnv()
 
+    activation = None
     if args.use_activation:
         activation = torch.tanh
 
