@@ -56,23 +56,9 @@ class Discriminator(nn.Module):
                          lambda_=10):
         grad_pen = 0
         if True:
+            exp_state = self.main(expert_state)
+            pol_state = self.main(policy_state)
             alpha = torch.rand(expert_state.size(0), 1)
-
-        # Change state values
-        alpha = torch.rand(expert_state.size(0), 1, 1, 1)
-
-        alpha_state = alpha.expand_as(expert_state).to(expert_state.device)
-        mixup_state = alpha_state * expert_state + (1 - alpha_state) * policy_state
-        mixup_state.requires_grad = True
-
-        alpha = alpha.view(expert_state.size(0), 1)
-        alpha_metrics = alpha.expand_as(expert_metrics).to(expert_metrics.device)
-        mixup_metrics = alpha_metrics * expert_metrics + (1 - alpha_metrics) * policy_metrics
-        mixup_metrics.requires_grad = True
-
-        alpha_action = alpha.expand_as(expert_action).to(expert_action.device)
-        mixup_action = alpha_action * expert_action + (1 - alpha_action) * policy_action
-        mixup_action.requires_grad = True
 
             expert_data = torch.cat([exp_state, expert_metrics, expert_action], dim=1)
             policy_data = torch.cat([pol_state, policy_metrics, policy_action], dim=1)
@@ -130,22 +116,26 @@ class Discriminator(nn.Module):
             expert_batch_rewards = expert_d.detach().cpu().numpy().reshape(-1)
             expert_rewards = np.concatenate((expert_rewards, expert_batch_rewards), axis=0)
 
-            expert_loss = torch.mean(torch.tanh(expert_d)).to(self.device)
-            policy_loss = torch.mean(torch.tanh(policy_d)).to(self.device)
+            expert_loss = F.binary_cross_entropy_with_logits(
+                expert_d,
+                torch.ones(expert_d.size()).to(self.device))
+            policy_loss = F.binary_cross_entropy_with_logits(
+                policy_d,
+                torch.zeros(policy_d.size()).to(self.device))
 
             expert_ac_loss += (expert_loss).item()
             policy_ac_loss += (policy_loss).item()
-            gail_loss = expert_loss - policy_loss
+            gail_loss = expert_loss + policy_loss
             grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
                                              policy_state, policy_metrics, policy_action)
 
-            loss += (-gail_loss + grad_pen).item()
+            loss += (gail_loss + grad_pen).item()
             g_loss += (gail_loss).item()
             gp += (grad_pen).item()
             n += 1
 
             self.optimizer.zero_grad()
-            (-gail_loss + grad_pen).backward()
+            (gail_loss + grad_pen).backward()
             self.optimizer.step()
 
         return loss / n, policy_rewards.mean(), expert_rewards.mean(), g_loss/n, gp/n, expert_ac_loss / n, policy_ac_loss / n
