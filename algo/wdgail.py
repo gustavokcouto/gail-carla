@@ -20,10 +20,15 @@ class Discriminator(nn.Module):
         C, H, W = state_shape
 
         self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2), nn.ReLU(),
-            nn.Conv2d(32, 64, 4, stride=2), nn.ReLU(),
-            nn.Conv2d(64, 128, 4, stride=2), nn.ReLU(),
-            nn.Conv2d(128, 256, 4, stride=2), nn.ReLU(), Flatten(),
+            nn.Conv2d(C, 32, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 64, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 128, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 256, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            Flatten(),
         ).to(device)
         self.clip = clip
         print("Using clip {}".format(self.clip))
@@ -35,8 +40,8 @@ class Discriminator(nn.Module):
         img_dim = 256*H*W
 
         self.trunk = nn.Sequential(
-            nn.Linear(img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim), nn.Tanh(),
-            nn.Linear(hidden_dim, hidden_dim), nn.Tanh(),
+            nn.Linear(img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim), nn.LeakyReLU(0.2),
+            nn.Linear(hidden_dim, hidden_dim), nn.LeakyReLU(0.2),
             nn.Linear(hidden_dim, 1)).to(device)
 
         self.main.train()
@@ -54,30 +59,43 @@ class Discriminator(nn.Module):
                          policy_metrics,
                          policy_action,
                          lambda_=10):
-        grad_pen = 0
-        if True:
-            exp_state = self.main(expert_state)
-            pol_state = self.main(policy_state)
-            alpha = torch.rand(expert_state.size(0), 1)
 
-            expert_data = torch.cat([exp_state, expert_metrics, expert_action], dim=1)
-            policy_data = torch.cat([pol_state, policy_metrics, policy_action], dim=1)
+        # Change state values
+        alpha = torch.rand(expert_state.size(0), 1, 1, 1)
 
-            alpha = alpha.expand_as(expert_data).to(expert_data.device)
+        alpha_state = alpha.expand_as(expert_state).to(expert_state.device)
+        mixup_state = alpha_state * expert_state + (1 - alpha_state) * policy_state
+        mixup_state.requires_grad = True
 
-            mixup_data = alpha * expert_data + (1 - alpha) * policy_data
+        alpha = alpha.view(expert_state.size(0), 1)
+        alpha_metrics = alpha.expand_as(expert_metrics).to(expert_metrics.device)
+        mixup_metrics = alpha_metrics * expert_metrics + (1 - alpha_metrics) * policy_metrics
+        mixup_metrics.requires_grad = True
 
-            disc = self.trunk(mixup_data)
-            ones = torch.ones(disc.size()).to(disc.device)
-            grad = autograd.grad(
-                outputs=disc,
-                inputs=mixup_data,
-                grad_outputs=ones,
-                create_graph=True,
-                retain_graph=True,
-                only_inputs=True)[0]
+        alpha_action = alpha.expand_as(expert_action).to(expert_action.device)
+        mixup_action = alpha_action * expert_action + (1 - alpha_action) * policy_action
+        mixup_action.requires_grad = True
 
-            grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
+        mixup_state_features = self.main(mixup_state)
+
+        mixup_data = torch.cat([mixup_state_features, mixup_metrics, mixup_action], dim=1)
+
+        disc = self.trunk(mixup_data)
+        ones = torch.ones(disc.size()).to(disc.device)
+
+        grad = autograd.grad(
+            outputs=disc,
+            inputs=(mixup_state, mixup_metrics, mixup_action),
+            grad_outputs=ones,
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True)[0]
+        
+        # Gradients have shape (batch_size, num_channels, img_width, img_height),
+        # so flatten to easily take norm per example in batch
+        grad = grad.view(grad.size(0), -1)
+
+        grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
 
     def update(self, expert_loader, rollouts, obsfilt=None):
