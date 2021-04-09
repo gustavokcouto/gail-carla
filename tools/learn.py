@@ -63,6 +63,7 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
 
     start = time.time()
 
+    best_episode = 0
     while i_update < nupdates:
 
         episode_t += 1
@@ -182,6 +183,9 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
                                               np.mean(np.array(epgailbuf))),
                                 time_step=time_step)
 
+        if eplenmean > best_episode:
+            best_episode = eplenmean
+            torch.save(actor_critic.state_dict(), 'carla_actor.pt')
 
         print("Episode: %d,   Time steps: %d,   Mean length: %d    Mean Reward: %f    Mean Gail Reward:%f"
             % (episode_t, time_step, eplenmean, eprewmean, np.mean(np.array(epgailbuf))))
