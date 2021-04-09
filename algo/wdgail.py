@@ -47,6 +47,7 @@ class Discriminator(nn.Module):
         self.main.train()
         self.trunk.train()
 
+        self.max_grad_norm = 0.5
         self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()))
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
@@ -154,6 +155,8 @@ class Discriminator(nn.Module):
 
             self.optimizer.zero_grad()
             (gail_loss + grad_pen).backward()
+            nn.utils.clip_grad_norm_(self.main.parameters(), self.max_grad_norm)
+            nn.utils.clip_grad_norm_(self.trunk.parameters(), self.max_grad_norm)
             self.optimizer.step()
 
         return loss / n, policy_rewards.mean(), expert_rewards.mean(), g_loss/n, gp/n, expert_ac_loss / n, policy_ac_loss / n
