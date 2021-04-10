@@ -12,6 +12,7 @@ class PPO():
                  num_mini_batch,
                  value_loss_coef,
                  entropy_coef,
+                 device,
                  lr=None,
                  eps=None,
                  max_grad_norm=None,
@@ -31,6 +32,8 @@ class PPO():
         self.value_loss_coef = value_loss_coef
         self.entropy_coef = entropy_coef
 
+        self.device = device
+
         self.gamma = gamma
         self.decay = decay
 
@@ -38,36 +41,6 @@ class PPO():
         self.use_clipped_value_loss = use_clipped_value_loss
 
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
-
-    def update_bc(self, expert_state, expert_actions, obfilt=None):
-        if obfilt:
-            expert_state = obfilt(expert_state.cpu().numpy(), update=False)
-            expert_state = torch.FloatTensor(expert_state).to(expert_actions.device)
-            expert_state = Variable(expert_state)
-        if isinstance(self.act_space, gym.spaces.Discrete):
-            _expert_actions = torch.argmax(expert_actions, 1)
-        else:
-            _expert_actions = expert_actions
-        values, actions_log_probs, _, _ = self.actor_critic.evaluate_actions(expert_state, None, None, \
-                _expert_actions)
-        loss = -actions_log_probs.mean()
-        self.optimizer.zero_grad()
-        loss.backward()
-        nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
-                                 self.max_grad_norm)
-        self.optimizer.step()
-        return loss
-
-    def get_action_loss(self, expert_state, expert_actions):
-        if isinstance(self.act_space, gym.spaces.Discrete):
-            _expert_actions = torch.argmax(expert_actions, 1)
-        else:
-            _expert_actions = expert_actions
-        values, actions_log_probs, _, _ = self.actor_critic.evaluate_actions(expert_state, None, None, \
-                _expert_actions)
-        loss = -actions_log_probs.mean()
-        return loss
-
 
     def update(self, rollouts, expert_dataset=None):
         # Expert dataset in case the BC update is required
@@ -80,20 +53,29 @@ class PPO():
         gail_action_loss_epoch = 0
         dist_entropy_epoch = 0
         bc_loss_epoch = 0
+        self.actor_critic.to(self.device)
 
         for e in range(self.ppo_epoch):
             data_generator = rollouts.feed_forward_generator(
-                advantages, self.num_mini_batch)
+                advantages, num_mini_batch=self.num_mini_batch)
 
             for sample in data_generator:
                 obs_batch, metrics_batch, actions_batch, \
                    value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
                         adv_targ = sample
 
+                obs_batch = obs_batch.to(self.device)
+                metrics_batch = metrics_batch.to(self.device)
+                actions_batch = actions_batch.to(self.device)
+                value_preds_batch = value_preds_batch.to(self.device)
+                return_batch = return_batch.to(self.device)
+                masks_batch = masks_batch.to(self.device)
+                old_action_log_probs_batch = old_action_log_probs_batch.to(self.device)
+                adv_targ = adv_targ.to(self.device)
+
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(
-                    obs_batch, metrics_batch, masks_batch,
-                    actions_batch)
+                    obs_batch, metrics_batch, actions_batch)
 
                 ratio = torch.exp(action_log_probs -
                                   old_action_log_probs_batch)
@@ -154,4 +136,6 @@ class PPO():
         if self.gamma is not None:
             self.gamma *= self.decay
 
+        self.actor_critic.cpu()
+        
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, bc_loss_epoch, gail_action_loss_epoch, self.gamma

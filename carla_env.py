@@ -154,15 +154,16 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, town='Town01', port=2000):
+    def __init__(self, env_id):
         super(CarlaEnv, self).__init__()
+        port = 2000 + 2 * env_id
         self._client = carla.Client('192.168.0.5', port)
         self._client.set_timeout(30.0)
 
         set_sync_mode(self._client, False)
 
-        self._town_name = town
-        self._world = self._client.load_world(town)
+        self._town_name = 'Town01'
+        self._world = self._client.load_world(self._town_name)
         self._map = self._world.get_map()
 
         self._blueprints = self._world.get_blueprint_library()

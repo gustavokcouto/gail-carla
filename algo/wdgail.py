@@ -29,7 +29,7 @@ class Discriminator(nn.Module):
             nn.Conv2d(128, 256, 4, stride=2),
             nn.LeakyReLU(0.2),
             Flatten(),
-        ).to(device)
+        )
         self.clip = clip
         print("Using clip {}".format(self.clip))
 
@@ -51,6 +51,14 @@ class Discriminator(nn.Module):
         self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()))
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
+
+    def gpu(self):
+        self.main.to(self.device)
+        self.trunk.to(self.device)
+    
+    def cpu(self):
+        self.main.cpu()
+        self.trunk.cpu()
 
     def compute_grad_pen(self,
                          expert_state,
@@ -118,6 +126,10 @@ class Discriminator(nn.Module):
                                               policy_data_generator):
             policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[2]
 
+            policy_state = policy_state.to(self.device)
+            policy_metrics = policy_metrics.to(self.device)
+            policy_action = policy_action.to(self.device)
+
             pol_state = self.main(policy_state)
             policy_d = self.trunk(
                 torch.cat([pol_state, policy_metrics, policy_action], dim=1))
@@ -126,7 +138,7 @@ class Discriminator(nn.Module):
 
             expert_state, expert_metrics, expert_action = expert_batch
 
-            expert_state = torch.FloatTensor(expert_state).to(self.device)
+            expert_state = expert_state.to(self.device)
             expert_metrics = expert_metrics.to(self.device)
             expert_action = expert_action.to(self.device)
             exp_state = self.main(expert_state)

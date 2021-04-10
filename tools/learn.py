@@ -6,14 +6,14 @@ import numpy as np
 from collections import deque
 import time
 from tools import utils, utli
-from carla_env import CarlaEnv
+from tools.storage import RolloutStorage
 
 
 def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
 
 
-def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator, rollouts, gail_train_loader, device, utli):
+def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator, gail_train_loader, device, utli):
 
     log_save_name = utli.Log_save_name4gail(cl_args)
     log_save_path = os.path.join("./runs", log_save_name)
@@ -35,10 +35,18 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
     nsteps = cl_args.num_steps
     S_time = time.time()
 
-    nenv = 1
+    nenv = cl_args.num_processes
 
     nbatch = np.floor(nsteps/nenv)
     nbatch = nbatch.astype(np.int16)
+
+    # The buffer
+    rollouts = RolloutStorage(nbatch,
+                              cl_args.num_processes,
+                              envs.observation_space.shape,
+                              envs.metrics_space.shape,
+                              envs.action_space)
+
     nupdates = np.floor(cl_args.num_env_steps / nsteps)
     nupdates = nupdates.astype(np.int16)
 
@@ -48,18 +56,13 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
 
     episode_rewards = deque(maxlen=10)
 
-    cum_gailrewards = .0
+    cum_gailrewards = [.0 for _ in range(cl_args.num_processes)]
 
     i_update = 0
 
-    obs, metrics = env.reset()
-    obs = torch.from_numpy(obs).float().to(device)
-    obs = torch.stack([obs])
-    metrics = torch.from_numpy(metrics).float().to(device)
-    metrics = torch.stack([metrics])
+    obs, metrics = envs.reset()
     rollouts.obs[0].copy_(obs)
     rollouts.metrics[0].copy_(metrics)
-    rollouts.to(device)
 
     start = time.time()
 
@@ -76,90 +79,86 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
                 agent.optimizer, i_update, nupdates,
                 cl_args.lr)
 
+        actor_critic.to(device)
         for step in range(nbatch):
             time_step += 1
 
             # Sample actions
             with torch.no_grad():
-                value, action, action_log_prob = actor_critic.act(
-                    rollouts.obs[step], rollouts.metrics[step], rollouts.masks[step])
+                value, action, action_log_prob = actor_critic.act(rollouts.obs[step].to(device), rollouts.metrics[step].to(device))
 
-            obs, metrics, reward, done, info = env.step(action)
-            obs = torch.from_numpy(obs).float().to(device)
-            obs = torch.stack([obs])
-            metrics = torch.from_numpy(metrics).float().to(device)
-            metrics = torch.stack([metrics])
-            reward = torch.from_numpy(reward).float()
+            obs, metrics, rewards, done, infos = envs.step(action)
 
-            maybeepinfo = info.get('episode')
-            if maybeepinfo:
-                epinfos.append(maybeepinfo)
-            if 'episode' in info.keys():
-                episode_rewards.append(info['episode']['r'])
+            for info in infos:
+                maybeepinfo = info.get('episode')
+                if maybeepinfo:
+                    epinfos.append(maybeepinfo)
+                    episode_rewards.append(info['episode']['r'])
 
             # If done then clean the history of observations.
-            if done:
-                mask = torch.FloatTensor([0.0])
-                obs, metrics = env.reset()
-                obs = torch.from_numpy(obs).float()
-                obs = torch.stack([obs])
-                metrics = torch.from_numpy(metrics).float()
-                metrics = torch.stack([metrics])
-            else:
-                mask = torch.FloatTensor([1.0])
-            rollouts.insert(obs, metrics, action, action_log_prob, value, reward, mask)
+            masks = torch.FloatTensor(
+                [[0.0] if done_ else [1.0] for done_ in done])
+
+            rollouts.insert(obs, metrics, action.cpu(), action_log_prob.cpu(), value.cpu(), rewards, masks)
+
         print('finished sim')
         with torch.no_grad():
             next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.metrics[-1], rollouts.masks[-1]).detach()
+                rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
+        actor_critic.cpu()
 
         # gail
-        if cl_args.gail:
-            gail_epoch = cl_args.gail_epoch
+        discriminator.gpu()
+        gail_epoch = cl_args.gail_epoch
 
-            dis_total_losses = []
-            policy_rewards = []
-            expert_rewards = []
-            dis_losses = []
-            dis_gps = []
-            expert_losses = []
-            policy_losses = []
-            for _ in range(gail_epoch):
+        dis_total_losses = []
+        policy_rewards = []
+        expert_rewards = []
+        dis_losses = []
+        dis_gps = []
+        expert_losses = []
+        policy_losses = []
+        for _ in range(gail_epoch):
+            dis_total_loss, policy_mean_reward, expert_reward_mean, dis_loss, dis_gp, expert_loss, policy_loss = discriminator.update(gail_train_loader, rollouts)
+            dis_total_losses.append(dis_total_loss)
+            policy_rewards.append(policy_mean_reward)
+            expert_rewards.append(expert_reward_mean)
+            dis_losses.append(dis_loss)
+            dis_gps.append(dis_gp)
+            expert_losses.append(expert_loss)
+            policy_losses.append(policy_loss)
 
-                dis_total_loss, policy_mean_reward, expert_reward_mean, dis_loss, dis_gp, expert_loss, policy_loss = discriminator.update(gail_train_loader, rollouts)
-                dis_total_losses.append(dis_total_loss)
-                policy_rewards.append(policy_mean_reward)
-                expert_rewards.append(expert_reward_mean)
-                dis_losses.append(dis_loss)
-                dis_gps.append(dis_gp)
-                expert_losses.append(expert_loss)
-                policy_losses.append(policy_loss)
-
-            utli.recordDisLossResults(results=(np.mean(np.array(dis_total_losses)),
-                                               np.mean(np.array(policy_rewards)),
-                                               np.mean(np.array(expert_rewards)),
-                                               np.mean(np.array(dis_losses)),
-                                               np.mean(np.array(dis_gps)),
-                                               np.mean(np.array(expert_losses)),
-                                               np.mean(np.array(policy_losses))),
-                                      time_step=time_step)
+        utli.recordDisLossResults(results=(np.mean(np.array(dis_total_losses)),
+                                            np.mean(np.array(policy_rewards)),
+                                            np.mean(np.array(expert_rewards)),
+                                            np.mean(np.array(dis_losses)),
+                                            np.mean(np.array(dis_gps)),
+                                            np.mean(np.array(expert_losses)),
+                                            np.mean(np.array(policy_losses))),
+                                    time_step=i_update)
 
 
-            for step in range(nbatch):
-                rollouts.rewards[step] = discriminator.predict_reward(
-                    rollouts.obs[step], rollouts.metrics[step], rollouts.actions[step], cl_args.gamma,
-                    rollouts.masks[step])
-                if rollouts.masks[step] == 1:
-                    cum_gailrewards += rollouts.rewards[step].item()
+        for step in range(nbatch):
+            rollouts.rewards[step] = discriminator.predict_reward(
+                rollouts.obs[step].to(device),
+                rollouts.metrics[step].to(device),
+                rollouts.actions[step].to(device),
+                cl_args.gamma,
+                rollouts.masks[step].to(device))
+
+            for i_env in range(cl_args.num_processes):
+                if rollouts.masks[step][i_env] == 0:
+                        cum_gailrewards[i_env] += rollouts.rewards[step][i_env].item()
                 else:
-                    epgailbuf.append(cum_gailrewards)
-                    cum_gailrewards=.0
+                    epgailbuf.append(cum_gailrewards[i_env])
+                    cum_gailrewards[i_env]=.0
+        discriminator.cpu()
 
         # compute returns
         rollouts.compute_returns(next_value, cl_args.gamma, cl_args.gae_lambda)
 
         # training PPO policy
-
+        
         value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma = agent.update(rollouts)
 
         utli.recordLossResults(results=(value_loss,
@@ -168,7 +167,7 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
                                         bc_loss,
                                         gail_loss,
                                         gail_gamma),
-                               time_step=time_step)
+                               time_step=i_update)
         rollouts.after_update()
 
 
@@ -181,7 +180,7 @@ def gailLearning_mujoco_origin(cl_args, env, actor_critic, agent, discriminator,
         utli.recordTrainResults_gail(results=(eprewmean,
                                               eplenmean,
                                               np.mean(np.array(epgailbuf))),
-                                time_step=time_step)
+                                time_step=i_update)
 
         if eplenmean > best_episode:
             best_episode = eplenmean

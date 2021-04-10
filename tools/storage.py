@@ -3,36 +3,26 @@ from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
 
 class RolloutStorage(object):
-    def __init__(self, num_steps, obs_shape, metrics_shape, action_space):
-        self.obs = torch.zeros(num_steps + 1, 1, *obs_shape)
-        self.metrics = torch.zeros(num_steps + 1, 1, *metrics_shape)
-        self.rewards = torch.zeros(num_steps, 1)
-        self.value_preds = torch.zeros(num_steps + 1, 1, 1)
-        self.returns = torch.zeros(num_steps + 1, 1)
-        self.action_log_probs = torch.zeros(num_steps, 1, 1)
-        self.actions = torch.zeros(num_steps, 1, action_space.shape[0])
-        self.masks = torch.ones(num_steps + 1, 1)
+    def __init__(self, num_steps, num_processes, obs_shape, metrics_shape, action_space):
+        self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
+        self.metrics = torch.zeros(num_steps + 1, num_processes, *metrics_shape)
+        self.rewards = torch.zeros(num_steps, num_processes, 1)
+        self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
+        self.returns = torch.zeros(num_steps + 1, num_processes, 1)
+        self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
+        self.actions = torch.zeros(num_steps, num_processes, action_space.shape[0])
+        self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.num_steps = num_steps
         self.step = 0
 
-    def to(self, device):
-        self.obs = self.obs.to(device)
-        self.metrics = self.metrics.to(device)
-        self.rewards = self.rewards.to(device)
-        self.value_preds = self.value_preds.to(device)
-        self.returns = self.returns.to(device)
-        self.action_log_probs = self.action_log_probs.to(device)
-        self.actions = self.actions.to(device)
-        self.masks = self.masks.to(device)
-
-    def insert(self, obs, metrics, actions, action_log_probs, value_preds, reward, mask):
+    def insert(self, obs, metrics, actions, action_log_probs, value_preds, rewards, masks):
         self.obs[self.step + 1].copy_(obs)
         self.metrics[self.step + 1].copy_(metrics)
         self.actions[self.step].copy_(actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
         self.value_preds[self.step].copy_(value_preds)
-        self.rewards[self.step].copy_(reward)
-        self.masks[self.step + 1].copy_(mask)
+        self.rewards[self.step].copy_(rewards)
+        self.masks[self.step + 1].copy_(masks)
 
         self.step = (self.step + 1) % self.num_steps
 
@@ -59,14 +49,16 @@ class RolloutStorage(object):
                                advantages,
                                num_mini_batch=None,
                                mini_batch_size=None):
-        num_steps = self.rewards.size()[0]
-        batch_size = num_steps
+        num_steps, num_processes = self.rewards.size()[0:2]
+        batch_size = num_processes * num_steps
 
         if mini_batch_size is None:
             assert batch_size >= num_mini_batch, (
-                "PPO requires the number of steps {}"
+                "PPO requires the number of processes ({}) "
+                "* number of steps ({}) = {} "
                 "to be greater than or equal to the number of PPO mini batches ({})."
-                "".format(num_steps, num_mini_batch))
+                "".format(num_processes, num_steps, num_processes * num_steps,
+                          num_mini_batch))
             mini_batch_size = batch_size // num_mini_batch
         sampler = BatchSampler(
             SubsetRandomSampler(range(batch_size)),
@@ -77,10 +69,9 @@ class RolloutStorage(object):
             metrics_batch = self.metrics[:-1].view(-1, *self.metrics.size()[2:])[indices]
             actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
             value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
-            return_batch = self.returns[indices]
-            masks_batch = self.masks[indices]
-            old_action_log_probs_batch = self.action_log_probs.view(-1,
-                                                                    1)[indices]
+            return_batch = self.returns[:-1].view(-1, 1)[indices]
+            masks_batch = self.masks[:-1].view(-1, 1)[indices]
+            old_action_log_probs_batch = self.action_log_probs.view(-1, 1)[indices]
             if advantages is None:
                 adv_targ = None
             else:

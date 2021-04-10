@@ -29,7 +29,8 @@ def argsparser():
     parser.add_argument('--use_linear_lr_decay', help='use linear lr decay', type=bool, default=True)
 
     #ppo
-    parser.add_argument('--num-steps', help='num-steps', type=int, default=1000)
+    parser.add_argument('--num_processes', help='num_processes', type=int, default=3)
+    parser.add_argument('--num-steps', help='num-steps', type=int, default=960)
     parser.add_argument('--lr', help='learning rate', type=float, default=2.5e-4)
     parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=4)
     parser.add_argument('--num-mini-batch', type=int, default=32, help='number of batches for ppo (default: 32)')
@@ -41,12 +42,10 @@ def argsparser():
     parser.add_argument('--value-loss-coef', type=float, default=0.5, help='value loss coefficient (default: 0.5)')
     parser.add_argument('--max-grad-norm', type=float, default=0.5, help='max norm of gradients (default: 0.5)')
 
-    # #gail
-    parser.add_argument('--gail', help='if gail', type=bool, default=True)
-    # parser.add_argument('--expert_path', help='trajs path', type=str, default='../data/baseline/deterministic.trpo.HalfCheetah.0.00.npz')
+    # gail
     parser.add_argument('--expert_path', help='trajs path', type=str, default='../data/ikostirkov/trajs_ant.h5')
     parser.add_argument('--gail-experts-dir',default='./gail_experts', help='directory that contains expert demonstrations for gail')
-    parser.add_argument('--gail_batch_size', type=int, default=112, help='gail batch size (default: 128)')
+    parser.add_argument('--gail_batch_size', type=int, default=128, help='gail batch size (default: 128)')
     parser.add_argument('--gail_epoch', help='number of steps to train discriminator in each epoch', type=int, default=5)
     parser.add_argument('--num_trajs', help='num trajs', type=int, default=4)
     parser.add_argument('--subsample_frequency', help='num trajs', type=int, default=1)
@@ -62,17 +61,16 @@ def train(args):
 
     # from ppo_gail_iko.algo.ppo4multienvs import PPO, ReplayBuffer
     from algo.ppo import PPO
-    from tools.storage import RolloutStorage
     from tools.model import Policy
 
     from algo.wdgail import Discriminator, ExpertDataset
 
     from tools.learn import gailLearning_mujoco_origin
     from learn_bc import learn_bc
-    from carla_env import CarlaEnv
 
     from tools import utli
     from tools import utils
+    from tools.envs import make_vec_envs
 
     from collections import deque
     import time
@@ -98,7 +96,7 @@ def train(args):
         shuffle=True,
         drop_last=True)
 
-    env = CarlaEnv()
+    envs = make_vec_envs(args.num_processes, device)
 
     activation = None
     if args.use_activation:
@@ -106,13 +104,12 @@ def train(args):
 
     # network
     actor_critic = Policy(
-        env.observation_space.shape,
-        env.metrics_space,
-        env.action_space,
+        envs.observation_space.shape,
+        envs.metrics_space,
+        envs.action_space,
         activation=activation)
-    actor_critic.to(device)
 
-    # learn_bc(actor_critic, env, device, gail_train_loader)
+    # learn_bc(actor_critic, envs, device, gail_train_loader)
 
     agent = PPO(
         actor_critic,
@@ -121,28 +118,22 @@ def train(args):
         args.num_mini_batch,
         args.value_loss_coef,
         args.entropy_coef,
+        device,
         lr=args.lr,
         eps=args.eps,
         gamma=args.gailgamma,
         decay=args.decay,
-        act_space=env.action_space,
+        act_space=envs.action_space,
         max_grad_norm=args.max_grad_norm)
 
     # discriminator
-    discr = Discriminator(env.observation_space.shape, env.metrics_space, env.action_space, 100, device)
-
-    # The buffer
-    rollouts = RolloutStorage(args.num_steps,
-                              env.observation_space.shape,
-                              env.metrics_space.shape,
-                              env.action_space)
+    discr = Discriminator(envs.observation_space.shape, envs.metrics_space, envs.action_space, 100, device)
 
     model = gailLearning_mujoco_origin(cl_args=cl_args,
-                                       env=env,
+                                       envs=envs,
                                        actor_critic=actor_critic,
                                        agent=agent,
                                        discriminator=discr,
-                                       rollouts=rollouts,
                                        gail_train_loader=gail_train_loader,
                                        device=device,
                                        utli=utli)

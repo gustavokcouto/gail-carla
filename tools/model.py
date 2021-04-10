@@ -19,8 +19,8 @@ class Policy(nn.Module):
         num_outputs = action_space.shape[0]
         self.dist = DiagGaussian(self.base.output_size, num_outputs, activation=activation)
 
-    def act(self, obs, metrics, masks, deterministic=False):
-        value, actor_features = self.base(obs, metrics, masks)
+    def act(self, obs, metrics, deterministic=False):
+        value, actor_features = self.base(obs, metrics)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -33,12 +33,12 @@ class Policy(nn.Module):
 
         return value, action, action_log_probs
 
-    def get_value(self, obs, metrics, masks):
-        value, _ = self.base(obs, metrics, masks)
+    def get_value(self, obs, metrics):
+        value, _ = self.base(obs, metrics)
         return value
 
-    def evaluate_actions(self, obs, metrics, masks, action):
-        value, actor_features = self.base(obs, metrics, masks)
+    def evaluate_actions(self, obs, metrics, action):
+        value, actor_features = self.base(obs, metrics)
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
@@ -82,7 +82,7 @@ class CNNBase(nn.Module):
 
         self.train()
 
-    def forward(self, obs, metrics, masks):
+    def forward(self, obs, metrics):
         x = self.main(obs)
         x = self.trunk(torch.cat([x, metrics], dim=1))
 
