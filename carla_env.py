@@ -154,7 +154,7 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, env_id):
+    def __init__(self, env_id=0):
         super(CarlaEnv, self).__init__()
         port = 2000 + 2 * env_id
         self._client = carla.Client('192.168.0.5', port)
@@ -177,13 +177,13 @@ class CarlaEnv(gym.Env):
         self._sensors = dict()
 
         self.action_space = spaces.Box(low=-10, high=10,
-                                       shape=(1,), dtype=np.float32)
+                                       shape=(2,), dtype=np.float32)
 
         self.observation_space = spaces.Box(low=0, high=255,
                                             shape=(9,144,256), dtype=np.uint8)
 
         self.metrics_space = spaces.Box(low=-100, high=100,
-                                            shape=(2,), dtype=np.float32)
+                                            shape=(3,), dtype=np.float32)
 
         self._command_planner = RoutePlanner(0.0001, 0.00025, 258, gps=True)
 
@@ -194,9 +194,8 @@ class CarlaEnv(gym.Env):
         self.start_pose = self.global_plan_world_coord[0][0]
         self.start_pose.location.z += 0.5
 
-        self.ep_length = 800
+        self.ep_length = 2400
         self.cur_length = 0
-        self.episode_reward = 0
         self.lane_invasion = False
         self.collision = False
         self.collision_sensor = None
@@ -297,9 +296,9 @@ class CarlaEnv(gym.Env):
         obs, metrics, _, _, _ = self.step(None)
 
         self.cur_length = 0
-        self.episode_reward = 0
         self.lane_invasion = False
         self.collision = False
+        self.route_completed = False
 
         return obs, metrics
 
@@ -311,17 +310,11 @@ class CarlaEnv(gym.Env):
                 carla.Rotation(pitch=-90)))
 
     def step(self, action):
-        target_speed = 4
-        velocity = self._player.get_velocity()
-        speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
-        delta = np.clip(target_speed - speed, 0.0, 0.25)
-        throttle = self._speed_controller.step(delta)
-        throttle = np.clip(throttle, 0.0, 0.75)
         control = carla.VehicleControl()
-        control.throttle = throttle
 
         if action is not None:
             control.steer = float(action[0])
+            control.throttle = float(action[1])
 
         control.brake = 0.0
         self._player.apply_control(control)
@@ -361,7 +354,11 @@ class CarlaEnv(gym.Env):
         self.debug.dot(origin, origin, (0, 0, 255))
         self.debug.show()
 
-        metrics = target * 1000
+        target *= 1000
+        velocity = self._player.get_velocity()
+        speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
+
+        metrics = np.array([target[0], target[1], speed])
         obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
 
         self.cur_length += 1
@@ -377,8 +374,20 @@ class CarlaEnv(gym.Env):
             'gps_y': gps[1],
             'compass': compass,
         }
-        if self.cur_length >= self.ep_length - 1 or self.lane_invasion or self.collision:
-            info['episode'] = {'r': self.episode_reward, 'l': self.cur_length}
+        self.route_completed = self._command_planner.route_completed()
+        if (self.cur_length >= self.ep_length - 1
+            or self.route_completed
+            or self.lane_invasion
+            or self.collision):
+
+            episode_reward = 10 * self._command_planner.route_completion()
+            if self.lane_invasion:
+                episode_reward -= 2
+            
+            if self.collision:
+                episode_reward -= 5
+
+            info['episode'] = {'r': episode_reward, 'l': self.cur_length}
             done = True
         self.info = info
 

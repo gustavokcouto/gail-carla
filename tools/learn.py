@@ -147,7 +147,7 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
                 rollouts.masks[step].to(device))
 
             for i_env in range(cl_args.num_processes):
-                if rollouts.masks[step][i_env] == 0:
+                if rollouts.masks[step][i_env]:
                         cum_gailrewards[i_env] += rollouts.rewards[step][i_env].item()
                 else:
                     epgailbuf.append(cum_gailrewards[i_env])
@@ -182,8 +182,8 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
                                               np.mean(np.array(epgailbuf))),
                                 time_step=i_update)
 
-        if eplenmean > best_episode:
-            best_episode = eplenmean
+        if eprewmean > best_episode:
+            best_episode = eprewmean
             torch.save(actor_critic.state_dict(), 'carla_actor.pt')
 
         print("Episode: %d,   Time steps: %d,   Mean length: %d    Mean Reward: %f    Mean Gail Reward:%f"

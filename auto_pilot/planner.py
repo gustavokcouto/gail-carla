@@ -56,6 +56,7 @@ class RoutePlanner(object):
 
     def set_route(self, global_plan, gps=False):
         self.route.clear()
+        self.route_size = len(global_plan)
 
         for pos, cmd in global_plan:
             if gps:
@@ -67,6 +68,12 @@ class RoutePlanner(object):
                 pos -= self.mean
 
             self.route.append((pos, cmd))
+
+    def route_completion(self):
+        return 1 - len(self.route)/self.route_size
+
+    def route_completed(self):
+        return len(self.route) == 2
 
     def run_step(self, gps):
         self.debug.clear()

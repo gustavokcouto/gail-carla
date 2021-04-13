@@ -14,7 +14,7 @@ from tools.model import Flatten
 
 
 class Discriminator(nn.Module):
-    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, clip=0.01):
+    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, max_grad_norm=None):
         super(Discriminator, self).__init__()
         self.device = device
         C, H, W = state_shape
@@ -30,8 +30,6 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2),
             Flatten(),
         )
-        self.clip = clip
-        print("Using clip {}".format(self.clip))
 
         for i in range(4):
             H = (H - 4)//2 + 1
@@ -47,7 +45,7 @@ class Discriminator(nn.Module):
         self.main.train()
         self.trunk.train()
 
-        self.max_grad_norm = 0.5
+        self.max_grad_norm = max_grad_norm
         self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()))
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
