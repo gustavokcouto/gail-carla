@@ -40,7 +40,7 @@ class Discriminator(nn.Module):
         self.trunk = nn.Sequential(
             nn.Linear(img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim), nn.LeakyReLU(0.2),
             nn.Linear(hidden_dim, hidden_dim), nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, 1)).to(device)
+            nn.Linear(hidden_dim, 1))
 
         self.main.train()
         self.trunk.train()

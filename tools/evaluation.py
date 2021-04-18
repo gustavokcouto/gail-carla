@@ -15,7 +15,7 @@ if __name__ == "__main__":
     
     device = torch.device('cuda:0')
 
-    loaddata = torch.load('carla_actor.pt')
+    loaddata = torch.load('carla_actors/carla_actor_17_04_03.pt')
     actor_critic.load_state_dict(loaddata)
     actor_critic.to(device)
 
@@ -35,6 +35,3 @@ if __name__ == "__main__":
             action = actions.cpu().numpy()[0]
 
             obs, metrics, rewards, done, infos = env.step(action)
-
-            if done:
-                break

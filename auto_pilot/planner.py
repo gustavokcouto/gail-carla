@@ -12,9 +12,7 @@ class Plotter(object):
         self.size = size
         self.clear()
         self.title = str(self.size)
-        self.scale = 5.5
-        if gps:
-            self.scale = 100000
+        self.scale = 100000
 
     def clear(self):
         from PIL import Image, ImageDraw
@@ -40,34 +38,28 @@ class Plotter(object):
 
 
 class RoutePlanner(object):
-    def __init__(self, min_distance, max_distance, debug_size=256, gps=False):
+    def __init__(self, min_distance, max_distance, debug_size=256):
         self.route = deque()
         self.min_distance = min_distance
         self.max_distance = max_distance
 
         self.mean = np.array([49.0, 8.0])
         self.scale = np.array([111324.60662786, 73032.1570362])
-        if gps:
-            self.mean = np.array([0, 0])
-            self.scale = np.array([1, 1])
-        self.gps = gps
+        self.mean = np.array([0, 0])
+        self.scale = np.array([1, 1])
 
-        self.debug = Plotter(debug_size, gps=gps)
+        self.debug = Plotter(debug_size)
 
-    def set_route(self, global_plan, gps=False):
+    def set_route(self, global_plan_gps, global_plan_world_coord):
         self.route.clear()
-        self.route_size = len(global_plan)
+        self.route_size = len(global_plan_gps)
 
-        for pos, cmd in global_plan:
-            if gps:
-                pos = np.array([pos['lat'], pos['lon']])
-                pos -= self.mean
-                pos *= self.scale
-            else:
-                pos = np.array([pos.location.x, pos.location.y])
-                pos -= self.mean
+        for (gps_pos, cmd), (pos, _) in zip(global_plan_gps, global_plan_world_coord):
+            gps_pos = np.array([gps_pos['lat'], gps_pos['lon']])
+            gps_pos -= self.mean
+            gps_pos *= self.scale
 
-            self.route.append((pos, cmd))
+            self.route.append((gps_pos, cmd, pos))
 
     def route_completion(self):
         return 1 - len(self.route)/self.route_size
@@ -95,11 +87,6 @@ class RoutePlanner(object):
             if distance <= self.min_distance and distance > farthest_in_range:
                 farthest_in_range = distance
                 to_pop = i
-            if not self.gps:
-                r = 255 * int(distance > self.min_distance)
-                g = 255 * int(self.route[i][1].value == 4)
-                b = 255
-                self.debug.dot(gps, self.route[i][0], (r, g, b))
 
         for _ in range(to_pop):
             if len(self.route) > 2:

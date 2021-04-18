@@ -29,7 +29,7 @@ def gen_trajectories(file_path=''):
     global_plan_gps, global_plan_world_coord = interpolate_trajectory(env._world, trajectory)
 
     # Test the trained agent
-    n_episodes = 2
+    n_episodes = 3
     states = []
     metrics = []
     actions = []

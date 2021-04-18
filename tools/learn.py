@@ -158,8 +158,10 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
         rollouts.compute_returns(next_value, cl_args.gamma, cl_args.gae_lambda)
 
         # training PPO policy
-        
-        value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma = agent.update(rollouts)
+        if cl_args.bcgail:
+            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma = agent.update(rollouts, gail_train_loader)
+        else:
+            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma = agent.update(rollouts)
 
         utli.recordLossResults(results=(value_loss,
                                         action_loss,
@@ -182,8 +184,8 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
                                               np.mean(np.array(epgailbuf))),
                                 time_step=i_update)
 
-        if eprewmean > best_episode:
-            best_episode = eprewmean
+        if eplenmean > best_episode:
+            best_episode = eplenmean
             torch.save(actor_critic.state_dict(), 'carla_actor.pt')
 
         print("Episode: %d,   Time steps: %d,   Mean length: %d    Mean Reward: %f    Mean Gail Reward:%f"

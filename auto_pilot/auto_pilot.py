@@ -13,15 +13,16 @@ class AutoPilot():
         self._turn_controller = PIDController(K_P=1.25, K_I=0.75, K_D=0.3, n=40)
         self._speed_controller = PIDController(K_P=5.0, K_I=0.5, K_D=1.0, n=40)
 
-        self._waypoint_planner = RoutePlanner(4.0, 50)
-        self._command_planner = RoutePlanner(7.5, 25.0, 257)
+        self._waypoint_planner = RoutePlanner(4.0e-5, 50e-5)
+        self._command_planner = RoutePlanner(7.5e-5, 25.0e-5, 257)
 
-        self._waypoint_planner.set_route(global_plan_gps, True)
+        self._waypoint_planner.set_route(global_plan_gps, global_plan_world_coord)
 
         ds_ids = downsample_route(global_plan_world_coord, 50)
         global_plan_gps = [global_plan_gps[x] for x in ds_ids]
+        global_plan_world_coord = [global_plan_world_coord[x] for x in ds_ids]
 
-        self._command_planner.set_route(global_plan_gps, True)
+        self._command_planner.set_route(global_plan_gps, global_plan_world_coord)
 
 
     def _get_angle_to(self, pos, theta, target):
@@ -56,17 +57,10 @@ class AutoPilot():
 
         return steer, throttle
 
-    def _get_position(self, observation):
-        gps = [observation[0], observation[1]]
-        gps = (gps - self._command_planner.mean) * self._command_planner.scale
-
-        return gps
-
     def run_step(self, observation):
-        position = self._get_position(observation)
-
-        near_node, _ = self._waypoint_planner.run_step(position)
-        far_node, _ = self._command_planner.run_step(position)
+        position = np.array(observation[0:2])
+        near_node, _, _ = self._waypoint_planner.run_step(position)
+        far_node, _, _ = self._command_planner.run_step(position)
         steer, throttle = self._get_control(near_node, far_node, position, observation[3], observation[2])
 
         steer = np.clip(steer + 1e-2 * np.random.randn(), -1.0, 1.0)

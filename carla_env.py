@@ -8,6 +8,8 @@ import time
 
 import carla
 
+from agents.navigation.local_planner import RoadOption
+
 from PIL import Image, ImageDraw
 from pathlib import Path
 from auto_pilot.route_parser import parse_routes_file
@@ -18,6 +20,7 @@ from auto_pilot.pid_controller import PIDController
 
 
 VEHICLE_NAME = 'vehicle.lincoln.mkz2017'
+
 
 def set_sync_mode(client, sync):
     world = client.get_world()
@@ -73,14 +76,15 @@ class GNSS(object):
     def __init__(self, world, player):
         bp = world.get_blueprint_library().find('sensor.other.gnss')
 
-        gnss_location = carla.Location(0,0,0)
-        gnss_rotation = carla.Rotation(0,0,0)
-        gnss_transform = carla.Transform(gnss_location,gnss_rotation)
+        gnss_location = carla.Location(0, 0, 0)
+        gnss_rotation = carla.Rotation(0, 0, 0)
+        gnss_transform = carla.Transform(gnss_location, gnss_rotation)
 
         self.type = type
         self.queue = queue.Queue()
 
-        self.gnss = world.spawn_actor(bp, gnss_transform, attach_to=player, attachment_type=carla.AttachmentType.Rigid)
+        self.gnss = world.spawn_actor(
+            bp, gnss_transform, attach_to=player, attachment_type=carla.AttachmentType.Rigid)
         self.gnss.listen(self.queue.put)
         self.gnss_data = np.array([0, 0])
         self.initialized = False
@@ -108,14 +112,15 @@ class IMU(object):
     def __init__(self, world, player):
         imu_bp = world.get_blueprint_library().find('sensor.other.imu')
 
-        imu_location = carla.Location(0,0,0)
-        imu_rotation = carla.Rotation(0,0,0)
+        imu_location = carla.Location(0, 0, 0)
+        imu_rotation = carla.Rotation(0, 0, 0)
         imu_transform = carla.Transform(imu_location, imu_rotation)
 
         self.type = type
         self.queue = queue.Queue()
 
-        self.imu = world.spawn_actor(imu_bp, imu_transform, attach_to=player, attachment_type=carla.AttachmentType.Rigid)
+        self.imu = world.spawn_actor(
+            imu_bp, imu_transform, attach_to=player, attachment_type=carla.AttachmentType.Rigid)
         self.imu.listen(self.queue.put)
         self.imu_data = np.array([0, 0])
         self.initialized = False
@@ -124,25 +129,25 @@ class IMU(object):
         if not self.initialized:
             raw_data = self.queue.get()
             self.imu_data = np.array([raw_data.accelerometer.x,
-                          raw_data.accelerometer.y,
-                          raw_data.accelerometer.z,
-                          raw_data.gyroscope.x,
-                          raw_data.gyroscope.y,
-                          raw_data.gyroscope.z,
-                          raw_data.compass,
-                         ], dtype=np.float64)
+                                      raw_data.accelerometer.y,
+                                      raw_data.accelerometer.z,
+                                      raw_data.gyroscope.x,
+                                      raw_data.gyroscope.y,
+                                      raw_data.gyroscope.z,
+                                      raw_data.compass,
+                                      ], dtype=np.float64)
             self.initialized = True
 
         while self.queue.qsize() > 0:
             raw_data = self.queue.get()
             self.imu_data = np.array([raw_data.accelerometer.x,
-                          raw_data.accelerometer.y,
-                          raw_data.accelerometer.z,
-                          raw_data.gyroscope.x,
-                          raw_data.gyroscope.y,
-                          raw_data.gyroscope.z,
-                          raw_data.compass,
-                         ], dtype=np.float64)
+                                      raw_data.accelerometer.y,
+                                      raw_data.accelerometer.z,
+                                      raw_data.gyroscope.x,
+                                      raw_data.gyroscope.y,
+                                      raw_data.gyroscope.z,
+                                      raw_data.compass,
+                                      ], dtype=np.float64)
 
         return self.imu_data
 
@@ -170,7 +175,7 @@ class CarlaEnv(gym.Env):
 
         self._tick = 0
         self._player = None
-
+        self.road_options = list(RoadOption)
         # vehicle, sensor
         self._actor_dict = collections.defaultdict(list)
         self._cameras = dict()
@@ -180,35 +185,27 @@ class CarlaEnv(gym.Env):
                                        shape=(2,), dtype=np.float32)
 
         self.observation_space = spaces.Box(low=0, high=255,
-                                            shape=(9,144,256), dtype=np.uint8)
+                                            shape=(9, 144, 256), dtype=np.uint8)
 
         self.metrics_space = spaces.Box(low=-100, high=100,
-                                            shape=(3,), dtype=np.float32)
+                                        shape=(3 + len(self.road_options),), dtype=np.float32)
 
-        self._command_planner = RoutePlanner(0.0001, 0.00025, 258, gps=True)
-
-        route_file = Path('data/route_00.xml')
-        trajectory = parse_routes_file(route_file)
-        self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(self._world, trajectory)
-
-        self.start_pose = self.global_plan_world_coord[0][0]
-        self.start_pose.location.z += 0.5
+        self._waypoint_planner = RoutePlanner(1e-5, 5e-4)
+        self._command_planner = RoutePlanner(1e-4, 2.5e-4, 258)
 
         self.ep_length = 2400
-        self.cur_length = 0
-        self.lane_invasion = False
-        self.collision = False
         self.collision_sensor = None
         self.lane_sensor = None
         self._speed_controller = PIDController(K_P=5.0, K_I=0.5, K_D=1.0, n=40)
 
         set_sync_mode(self._client, True)
 
-        self._spawn_player(self.start_pose)
+        self._spawn_player()
         self._setup_sensors()
         self.debug = Plotter(259, gps=True)
 
-    def _spawn_player(self, start_pose):
+    def _spawn_player(self):
+        start_pose = self.get_start_position()
         vehicle_bp = np.random.choice(self._blueprints.filter(VEHICLE_NAME))
         vehicle_bp.set_attribute('role_name', 'hero')
 
@@ -216,40 +213,22 @@ class CarlaEnv(gym.Env):
         self._actor_dict['player'].append(self._player)
 
         lane_bp = self._world.get_blueprint_library().find('sensor.other.lane_invasion')
-        lane_location = carla.Location(0,0,0)
-        lane_rotation = carla.Rotation(0,0,0)
-        lane_transform = carla.Transform(lane_location,lane_rotation)
-        ego_lane = self._world.spawn_actor(lane_bp,lane_transform,attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
+        lane_location = carla.Location(0, 0, 0)
+        lane_rotation = carla.Rotation(0, 0, 0)
+        lane_transform = carla.Transform(lane_location, lane_rotation)
+        ego_lane = self._world.spawn_actor(
+            lane_bp, lane_transform, attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
         ego_lane.listen(lambda lane: self.lane_callback(lane))
         self.lane_sensor = ego_lane
 
         col_bp = self._world.get_blueprint_library().find('sensor.other.collision')
-        col_location = carla.Location(0,0,0)
-        col_rotation = carla.Rotation(0,0,0)
-        col_transform = carla.Transform(col_location,col_rotation)
-        ego_col = self._world.spawn_actor(col_bp,col_transform,attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
+        col_location = carla.Location(0, 0, 0)
+        col_rotation = carla.Rotation(0, 0, 0)
+        col_transform = carla.Transform(col_location, col_rotation)
+        ego_col = self._world.spawn_actor(
+            col_bp, col_transform, attach_to=self._player, attachment_type=carla.AttachmentType.Rigid)
         ego_col.listen(lambda colli: self.col_callback(colli))
         self.collision_sensor = ego_col
-
-        ds_ids = downsample_route(self.global_plan_world_coord, 50)
-        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
-
-        self._command_planner.set_route(global_plan_gps, True)
-
-    def clean_simulator(self):
-        self._time_start = time.time()
-        self._cameras.clear()
-        self._sensors.clear()
-
-        if self.lane_sensor:
-            self.lane_sensor.destroy()
-        
-        if self.collision_sensor:
-            self.collision_sensor.destroy()
-
-        for actor_type in list(self._actor_dict.keys()):
-            self._client.apply_batch([carla.command.DestroyActor(x) for x in self._actor_dict[actor_type]])
-            self._actor_dict[actor_type].clear()        
 
     def lane_callback(self, lane):
         self.lane_invasion = True
@@ -263,42 +242,72 @@ class CarlaEnv(gym.Env):
         """
         Add sensors to _actor_dict to be cleaned up.
         """
-        self._cameras['rgb'] = Camera(self._world, self._player, 256, 144, 90, 1.2, 0.0, 1.3, 0.0, 0.0)
-        self._cameras['rgb_left'] = Camera(self._world, self._player, 256, 144, 90, 1.2, -0.25, 1.3, 0.0, -45.0)
-        self._cameras['rgb_right'] = Camera(self._world, self._player, 256, 144, 90, 1.2, 0.25, 1.3, 0.0, 45.0)
+        self._cameras['rgb'] = Camera(
+            self._world, self._player, 256, 144, 90, 1.2, 0.0, 1.3, 0.0, 0.0)
+        self._cameras['rgb_left'] = Camera(
+            self._world, self._player, 256, 144, 90, 1.2, -0.25, 1.3, 0.0, -45.0)
+        self._cameras['rgb_right'] = Camera(
+            self._world, self._player, 256, 144, 90, 1.2, 0.25, 1.3, 0.0, 45.0)
 
         self._sensors['gnss'] = GNSS(self._world, self._player)
         self._sensors['imu'] = IMU(self._world, self._player)
 
-    def reset_player(self):
-        self._player.set_transform(self.start_pose)
+    def get_start_position(self):
+        if not self._player:
+            route_file = Path('data/route_00.xml')
+            trajectory = parse_routes_file(route_file)
+            self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(
+                self._world, trajectory)
+
+            start_pose = self.global_plan_world_coord[0][0]
+            start_pose.location.z += 0.5
+
+        else:
+            if self._command_planner.route_completed() or len(self._command_planner.route) == 0:
+                self._waypoint_planner.set_route(
+                    self.global_plan_gps, self.global_plan_world_coord)
+                ds_ids = downsample_route(self.global_plan_world_coord, 50)
+                global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
+                global_plan_world_coord = [
+                    self.global_plan_world_coord[x] for x in ds_ids]
+                self._command_planner.set_route(
+                    global_plan_gps, global_plan_world_coord)
+
+            transform = self._player.get_transform()
+            start_pose = self._waypoint_planner.route[0][2]
+            start_pose.location.z = transform.location.z
+
+        return start_pose
+
+    def reset_player_position(self):
+        start_pose = self.get_start_position()
+
+        ticks = 4
         velocity = carla.Vector3D()
-        self._player.set_target_angular_velocity(velocity)
-        self._player.set_target_velocity(velocity)
+
+        for _ in range(ticks):
+            self._world.tick()
+            self._player.set_transform(start_pose)
+            self._player.set_target_angular_velocity(velocity)
+            self._player.set_target_velocity(velocity)
 
     def reset(self):
-        ticks = 10
-        for _ in range(ticks):
-            self.reset_player()
-            self.step(None)
-
-        ds_ids = downsample_route(self.global_plan_world_coord, 50)
-        global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
-
-        self._command_planner.set_route(global_plan_gps, True)
+        self.reset_player_position()
 
         for x in self._actor_dict['camera']:
             x.get()
 
         self._time_start = time.time()
         self._tick = 0
-        
-        obs, metrics, _, _, _ = self.step(None)
 
         self.cur_length = 0
         self.lane_invasion = False
         self.collision = False
         self.route_completed = False
+        self.episode_reward = 0
+        self.last_target = [0, 0]
+
+        obs, metrics, _, _, _ = self.step(None)
 
         return obs, metrics
 
@@ -339,7 +348,8 @@ class CarlaEnv(gym.Env):
         gps = result['gnss']
         compass = result['imu'][-1]
 
-        far_node, _ = self._command_planner.run_step(gps)
+        near_node, _, _ = self._waypoint_planner.run_step(gps)
+        far_node, road_option, _ = self._command_planner.run_step(gps)
 
         rotation_matrix = np.array([
             [np.cos(compass), -np.sin(compass)],
@@ -358,7 +368,9 @@ class CarlaEnv(gym.Env):
         velocity = self._player.get_velocity()
         speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
 
-        metrics = np.array([target[0], target[1], speed])
+        road_option_metrics = [
+            1.0 if road_option == _road_option else 0.0 for _road_option in self.road_options]
+        metrics = np.array([target[0], target[1], speed, *road_option_metrics])
         obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
 
         self.cur_length += 1
@@ -374,25 +386,28 @@ class CarlaEnv(gym.Env):
             'gps_y': gps[1],
             'compass': compass,
         }
+        if self.lane_invasion:
+            self.episode_reward -= 2
+
+        if self.collision:
+            self.episode_reward -= 5
+
+        if not (self.last_target[0] == far_node[0]
+                and self.last_target[1] == far_node[1]):
+            self.episode_reward += 1
+        self.last_target = far_node
+
         self.route_completed = self._command_planner.route_completed()
         if (self.cur_length >= self.ep_length - 1
             or self.route_completed
-            or self.lane_invasion
-            or self.collision):
-
-            episode_reward = 10 * self._command_planner.route_completion()
-            if self.lane_invasion:
-                episode_reward -= 2
-            
-            if self.collision:
-                episode_reward -= 5
-
-            info['episode'] = {'r': episode_reward, 'l': self.cur_length}
+            or self.collision
+                or self.lane_invasion):
+            info['episode'] = {'r': self.episode_reward, 'l': self.cur_length}
             done = True
+
         self.info = info
 
         return obs, metrics, reward, done, info
-
 
     def close(self):
         set_sync_mode(self._client, False)
