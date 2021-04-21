@@ -47,8 +47,9 @@ class Discriminator(nn.Module):
         self.main.train()
         self.trunk.train()
 
+        self.activation = nn.LeakyReLU(0.2)
         self.max_grad_norm = 0.5
-        self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()))
+        self.optimizer = torch.optim.RMSprop(list(self.main.parameters()) + list(self.trunk.parameters()), 5e-5)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
 
@@ -147,26 +148,31 @@ class Discriminator(nn.Module):
             expert_batch_rewards = expert_d.detach().cpu().numpy().reshape(-1)
             expert_rewards = np.concatenate((expert_rewards, expert_batch_rewards), axis=0)
 
-            expert_loss = F.binary_cross_entropy_with_logits(
-                expert_d,
-                torch.ones(expert_d.size()).to(self.device))
-            policy_loss = F.binary_cross_entropy_with_logits(
-                policy_d,
-                torch.zeros(policy_d.size()).to(self.device))
+            # expert_loss = F.binary_cross_entropy_with_logits(
+            #     expert_d,
+            #     torch.ones(expert_d.size()).to(self.device))
+            # policy_loss = F.binary_cross_entropy_with_logits(
+            #     policy_d,
+            #     torch.zeros(policy_d.size()).to(self.device))
+            expert_loss = torch.mean(torch.sigmoid(expert_d)).to(self.device)
+            policy_loss = torch.mean(torch.sigmoid(policy_d)).to(self.device)
 
             expert_ac_loss += (expert_loss).item()
             policy_ac_loss += (policy_loss).item()
-            gail_loss = expert_loss + policy_loss
+            # gail_loss = expert_loss + policy_loss
+            wd = expert_loss - policy_loss
             grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
                                              policy_state, policy_metrics, policy_action)
 
-            loss += (gail_loss + grad_pen).item()
-            g_loss += (gail_loss).item()
+            # loss += (gail_loss + grad_pen).item()
+            loss += (-wd + grad_pen).item()
+            g_loss += (wd).item()
             gp += (grad_pen).item()
             n += 1
 
             self.optimizer.zero_grad()
-            (gail_loss + grad_pen).backward()
+            # (gail_loss + grad_pen).backward()
+            (-wd + grad_pen).backward()
             nn.utils.clip_grad_norm_(self.main.parameters(), self.max_grad_norm)
             nn.utils.clip_grad_norm_(self.trunk.parameters(), self.max_grad_norm)
             self.optimizer.step()

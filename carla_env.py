@@ -154,7 +154,7 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, env_id):
+    def __init__(self, env_id=0):
         super(CarlaEnv, self).__init__()
         port = 2000 + 2 * env_id
         self._client = carla.Client('192.168.0.5', port)

@@ -118,6 +118,11 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
         dis_gps = []
         expert_losses = []
         policy_losses = []
+        if (i_update - 1) <= 5:
+            gal_epoch = 110 - (i_update - 1) * 20
+        else:
+            gail_epoch = 10
+
         for _ in range(gail_epoch):
             dis_total_loss, policy_mean_reward, expert_reward_mean, dis_loss, dis_gp, expert_loss, policy_loss = discriminator.update(gail_train_loader, rollouts)
             dis_total_losses.append(dis_total_loss)
