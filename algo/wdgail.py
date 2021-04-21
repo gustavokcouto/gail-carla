@@ -46,7 +46,7 @@ class Discriminator(nn.Module):
         self.trunk.train()
 
         self.max_grad_norm = max_grad_norm
-        self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()))
+        self.optimizer = torch.optim.RMSprop(list(self.main.parameters()) + list(self.trunk.parameters()), 5e-5)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
 

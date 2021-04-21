@@ -30,15 +30,15 @@ def argsparser():
 
     #ppo
     parser.add_argument('--num_processes', help='num_processes', type=int, default=3)
-    parser.add_argument('--num-steps', help='num-steps', type=int, default=1200)
+    parser.add_argument('--num-steps', help='num-steps', type=int, default=3000)
     parser.add_argument('--lr', help='learning rate', type=float, default=2.5e-4)
-    parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=2)
+    parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=10)
     parser.add_argument('--num-mini-batch', type=int, default=8, help='number of batches for ppo (default: 32)')
     parser.add_argument('--clip-param', type=float, default=0.1, help='ppo clip parameter (default: 0.2)')
     parser.add_argument('--eps', type=float, default=1e-5, help='RMSprop optimizer epsilon (default: 1e-5)')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for rewards (default: 0.99)')
     parser.add_argument('--gae-lambda', type=float, default=0.95, help='gae lambda parameter (default: 0.95)')
-    parser.add_argument('--entropy-coef', type=float, default=0.0, help='entropy term coefficient (default: 0.01)')
+    parser.add_argument('--entropy-coef', type=float, default=0.01, help='entropy term coefficient (default: 0.01)')
     parser.add_argument('--value-loss-coef', type=float, default=0.5, help='value loss coefficient (default: 0.5)')
     parser.add_argument('--max-grad-norm', type=float, default=0.5, help='max norm of gradients (default: 0.5)')
 
