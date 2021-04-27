@@ -15,7 +15,7 @@ if __name__ == "__main__":
     
     device = torch.device('cuda:0')
 
-    loaddata = torch.load('carla_actors/carla_actor_17_04_03.pt')
+    loaddata = torch.load('carla_actors/carla_actor27_04.pt')
     actor_critic.load_state_dict(loaddata)
     actor_critic.to(device)
 

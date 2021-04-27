@@ -47,9 +47,10 @@ class AutoPilot():
         steer = round(steer, 3)
 
         # Acceleration.
-        angle_far_unnorm = self._get_angle_to(position, theta, far_target)
-        should_slow = abs(angle_far_unnorm) > 45.0 or abs(angle_unnorm) > 5.0
-        target_speed = 4 if should_slow else 7.0
+        # angle_far_unnorm = self._get_angle_to(position, theta, far_target)
+        # should_slow = abs(angle_far_unnorm) > 45.0 or abs(angle_unnorm) > 5.0
+        # target_speed = 4 if should_slow else 7.0
+        target_speed = 4
 
         delta = np.clip(target_speed - speed, 0.0, 0.25)
         throttle = self._speed_controller.step(delta)

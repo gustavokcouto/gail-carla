@@ -30,9 +30,9 @@ def argsparser():
 
     #ppo
     parser.add_argument('--num_processes', help='num_processes', type=int, default=3)
-    parser.add_argument('--num-steps', help='num-steps', type=int, default=3000)
+    parser.add_argument('--num-steps', help='num-steps', type=int, default=3600)
     parser.add_argument('--lr', help='learning rate', type=float, default=2.5e-4)
-    parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=10)
+    parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=4)
     parser.add_argument('--num-mini-batch', type=int, default=8, help='number of batches for ppo (default: 32)')
     parser.add_argument('--clip-param', type=float, default=0.1, help='ppo clip parameter (default: 0.2)')
     parser.add_argument('--eps', type=float, default=1e-5, help='RMSprop optimizer epsilon (default: 1e-5)')
@@ -46,7 +46,7 @@ def argsparser():
     parser.add_argument('--expert_path', help='trajs path', type=str, default='../data/ikostirkov/trajs_ant.h5')
     parser.add_argument('--gail-experts-dir',default='./gail_experts', help='directory that contains expert demonstrations for gail')
     parser.add_argument('--gail_batch_size', type=int, default=128, help='gail batch size (default: 128)')
-    parser.add_argument('--gail_epoch', help='number of steps to train discriminator in each epoch', type=int, default=3)
+    parser.add_argument('--gail_epoch', help='number of steps to train discriminator in each epoch', type=int, default=5)
     parser.add_argument('--gail-max-grad-norm', type=float, default=0.5, help='max norm of gradients (default: 0.5)')
     parser.add_argument('--num_trajs', help='num trajs', type=int, default=3)
     parser.add_argument('--subsample_frequency', help='num trajs', type=int, default=1)
