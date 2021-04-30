@@ -7,6 +7,7 @@ class RolloutStorage(object):
         self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
         self.metrics = torch.zeros(num_steps + 1, num_processes, *metrics_shape)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
+        self.gail_rewards = torch.zeros(num_steps, num_processes, 1)
         self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
@@ -14,6 +15,17 @@ class RolloutStorage(object):
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
         self.num_steps = num_steps
         self.step = 0
+
+    def to(self, device):
+        self.obs = self.obs.to(device)
+        self.metrics = self.metrics.to(device)
+        self.rewards = self.rewards.to(device)
+        self.gail_rewards = self.gail_rewards.to(device)
+        self.value_preds = self.value_preds.to(device)
+        self.returns = self.returns.to(device)
+        self.action_log_probs = self.action_log_probs.to(device)
+        self.actions = self.actions.to(device)
+        self.masks = self.masks.to(device)
 
     def insert(self, obs, metrics, actions, action_log_probs, value_preds, rewards, masks):
         self.obs[self.step + 1].copy_(obs)
@@ -38,11 +50,11 @@ class RolloutStorage(object):
         self.value_preds[-1] = next_value
         gae = 0
         for step in reversed(range(self.rewards.size(0))):
-            delta = self.rewards[step] + gamma * self.value_preds[
-                step + 1] * self.masks[step +
-                                        1] - self.value_preds[step]
-            gae = delta + gamma * gae_lambda * self.masks[step +
-                                                            1] * gae
+            delta = self.rewards[step] + self.gail_rewards[step] \
+                + gamma * self.value_preds[step + 1] \
+                * self.masks[step + 1] - self.value_preds[step]
+            gae = delta + gamma * gae_lambda \
+                * self.masks[step + 1] * gae
             self.returns[step] = gae + self.value_preds[step]
 
     def feed_forward_generator(self,

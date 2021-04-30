@@ -63,6 +63,7 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
     obs, metrics = envs.reset()
     rollouts.obs[0].copy_(obs)
     rollouts.metrics[0].copy_(metrics)
+    rollouts.to(device)
 
     start = time.time()
 
@@ -79,13 +80,12 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
                 agent.optimizer, i_update, nupdates,
                 cl_args.lr)
 
-        actor_critic.to(device)
         for step in range(nbatch):
             time_step += 1
 
             # Sample actions
             with torch.no_grad():
-                value, action, action_log_prob = actor_critic.act(rollouts.obs[step].to(device), rollouts.metrics[step].to(device))
+                value, action, action_log_prob = actor_critic.act(rollouts.obs[step], rollouts.metrics[step])
 
             obs, metrics, rewards, done, infos = envs.step(action)
 
@@ -99,16 +99,14 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
             masks = torch.FloatTensor(
                 [[0.0] if done_ else [1.0] for done_ in done])
 
-            rollouts.insert(obs, metrics, action.cpu(), action_log_prob.cpu(), value.cpu(), rewards, masks)
+            rollouts.insert(obs, metrics, action, action_log_prob, value, rewards, masks)
 
         print('finished sim')
         with torch.no_grad():
             next_value = actor_critic.get_value(
-                rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
-        actor_critic.cpu()
+                rollouts.obs[-1], rollouts.metrics[-1]).detach()
 
         # gail
-        discriminator.gpu()
         gail_epoch = cl_args.gail_epoch
 
         dis_total_losses = []
@@ -139,20 +137,19 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
 
 
         for step in range(nbatch):
-            rollouts.rewards[step] = discriminator.predict_reward(
-                rollouts.obs[step].to(device),
-                rollouts.metrics[step].to(device),
-                rollouts.actions[step].to(device),
+            rollouts.gail_rewards[step] = discriminator.predict_reward(
+                rollouts.obs[step],
+                rollouts.metrics[step],
+                rollouts.actions[step],
                 cl_args.gamma,
-                rollouts.masks[step].to(device))
+                rollouts.masks[step])
 
             for i_env in range(cl_args.num_processes):
                 if rollouts.masks[step][i_env]:
-                        cum_gailrewards[i_env] += rollouts.rewards[step][i_env].item()
+                        cum_gailrewards[i_env] += rollouts.gail_rewards[step][i_env].item()
                 else:
                     epgailbuf.append(cum_gailrewards[i_env])
                     cum_gailrewards[i_env]=.0
-        discriminator.cpu()
 
         # compute returns
         rollouts.compute_returns(next_value, cl_args.gamma, cl_args.gae_lambda)

@@ -29,7 +29,7 @@ class Discriminator(nn.Module):
             nn.Conv2d(128, 256, 4, stride=2),
             nn.LeakyReLU(0.2),
             Flatten(),
-        )
+        ).to(device)
 
         for i in range(4):
             H = (H - 4)//2 + 1
@@ -40,7 +40,7 @@ class Discriminator(nn.Module):
         self.trunk = nn.Sequential(
             nn.Linear(img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim), nn.LeakyReLU(0.2),
             nn.Linear(hidden_dim, hidden_dim), nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, 1))
+            nn.Linear(hidden_dim, 1)).to(device)
 
         self.main.train()
         self.trunk.train()
@@ -49,14 +49,6 @@ class Discriminator(nn.Module):
         self.optimizer = torch.optim.RMSprop(list(self.main.parameters()) + list(self.trunk.parameters()), 5e-5)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
-
-    def gpu(self):
-        self.main.to(self.device)
-        self.trunk.to(self.device)
-    
-    def cpu(self):
-        self.main.cpu()
-        self.trunk.cpu()
 
     def compute_grad_pen(self,
                          expert_state,
@@ -123,10 +115,6 @@ class Discriminator(nn.Module):
         for expert_batch, policy_batch in zip(expert_loader,
                                               policy_data_generator):
             policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[2]
-
-            policy_state = policy_state.to(self.device)
-            policy_metrics = policy_metrics.to(self.device)
-            policy_action = policy_action.to(self.device)
 
             pol_state = self.main(policy_state)
             policy_d = self.trunk(

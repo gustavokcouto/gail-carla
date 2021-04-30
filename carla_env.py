@@ -162,7 +162,7 @@ class CarlaEnv(gym.Env):
     def __init__(self, env_id=0):
         super(CarlaEnv, self).__init__()
         port = 2000 + 2 * env_id
-        self._client = carla.Client('192.168.0.5', port)
+        self._client = carla.Client('192.168.0.4', port)
         self._client.set_timeout(30.0)
 
         set_sync_mode(self._client, False)
@@ -253,30 +253,36 @@ class CarlaEnv(gym.Env):
         self._sensors['imu'] = IMU(self._world, self._player)
 
     def get_start_position(self):
-        if not self._player:
-            route_file = Path('data/route_00.xml')
-            trajectory = parse_routes_file(route_file)
-            self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(
-                self._world, trajectory)
+        if self._command_planner.route_completed() or len(self._command_planner.route) == 0:
+            if not self._player:
+                route_file = Path('data/route_00.xml')
+                trajectory = parse_routes_file(route_file)
+                self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(
+                    self._world, trajectory)
+                random_start = np.random.randint(len(trajectory) - 2)
+                global_plan_gps, global_plan_world_coord = interpolate_trajectory(
+                    self._world, trajectory[random_start:])
 
-            start_pose = self.global_plan_world_coord[0][0]
-            start_pose.location.z += 0.5
+                start_pose = global_plan_world_coord[0][0]
+                start_pose.location.z += 0.5
+            
+            else:
+                global_plan_gps = self.global_plan_gps
+                global_plan_world_coord = self.global_plan_world_coord
+            
+            self._waypoint_planner.set_route(global_plan_gps, global_plan_world_coord)
+            ds_ids = downsample_route(global_plan_world_coord, 50)
+            global_plan_gps = [global_plan_gps[x] for x in ds_ids]
+            global_plan_world_coord = [
+                global_plan_world_coord[x] for x in ds_ids]
+            self._command_planner.set_route(
+                global_plan_gps, global_plan_world_coord)
 
-        else:
-            if self._command_planner.route_completed() or len(self._command_planner.route) == 0:
-                self._waypoint_planner.set_route(
-                    self.global_plan_gps, self.global_plan_world_coord)
-                ds_ids = downsample_route(self.global_plan_world_coord, 50)
-                global_plan_gps = [self.global_plan_gps[x] for x in ds_ids]
-                global_plan_world_coord = [
-                    self.global_plan_world_coord[x] for x in ds_ids]
-                self._command_planner.set_route(
-                    global_plan_gps, global_plan_world_coord)
-
+        if self._player:
             transform = self._player.get_transform()
             start_pose = self._waypoint_planner.route[0][2]
             start_pose.location.z = transform.location.z
-
+            
         return start_pose
 
     def reset_player_position(self):
@@ -305,7 +311,7 @@ class CarlaEnv(gym.Env):
         self.collision = False
         self.route_completed = False
         self.episode_reward = 0
-        self.last_target = [0, 0]
+        self.last_target = None
 
         obs, metrics, _, _, _ = self.step(None)
 
@@ -374,7 +380,7 @@ class CarlaEnv(gym.Env):
         obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
 
         self.cur_length += 1
-        reward = np.array(0)
+        
         done = False
 
         info = {
@@ -386,16 +392,20 @@ class CarlaEnv(gym.Env):
             'gps_y': gps[1],
             'compass': compass,
         }
+        reward = 0
         if self.lane_invasion:
+            reward -= 2
             self.episode_reward -= 2
 
         if self.collision:
+            reward -= 5
             self.episode_reward -= 5
 
-        if not (self.last_target[0] == far_node[0]
-                and self.last_target[1] == far_node[1]):
-            self.episode_reward += 1
-        self.last_target = far_node
+        if (not self.last_target is None) and (self.last_target != near_node).any():
+            reward += 1
+
+        self.episode_reward += reward
+        self.last_target = near_node
 
         self.route_completed = self._command_planner.route_completed()
         if (self.cur_length >= self.ep_length - 1
@@ -406,6 +416,7 @@ class CarlaEnv(gym.Env):
             done = True
 
         self.info = info
+        reward = np.array(reward)
 
         return obs, metrics, reward, done, info
 
