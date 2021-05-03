@@ -108,7 +108,10 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
 
         # gail
         gail_epoch = cl_args.gail_epoch
-
+        if i_update <= 6:
+            gail_epoch = 25 - (i_update - 1) * 4  # Warm up
+        else:
+            gail_epoch = 5
         dis_total_losses = []
         policy_rewards = []
         expert_rewards = []

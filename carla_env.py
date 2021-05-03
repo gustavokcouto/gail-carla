@@ -395,17 +395,15 @@ class CarlaEnv(gym.Env):
         reward = 0
         if self.lane_invasion:
             reward -= 2
-            self.episode_reward -= 2
 
         if self.collision:
             reward -= 5
-            self.episode_reward -= 5
 
-        if (not self.last_target is None) and (self.last_target != near_node).any():
+        if (not self.last_target is None) and (self.last_target != far_node).any():
             reward += 1
 
         self.episode_reward += reward
-        self.last_target = near_node
+        self.last_target = far_node
 
         self.route_completed = self._command_planner.route_completed()
         if (self.cur_length >= self.ep_length - 1
