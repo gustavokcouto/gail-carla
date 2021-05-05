@@ -89,3 +89,8 @@ def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
     lr = initial_lr - (initial_lr * (epoch / float(total_num_epochs)))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+
+def update_linear_entropy(epoch, total_num_epochs, initial_entropy, end_entropy):
+    """Decreases the learning rate linearly"""
+    return initial_entropy - ((initial_entropy - end_entropy) * (epoch / float(total_num_epochs)))

@@ -36,8 +36,11 @@ class DiagGaussian(nn.Module):
                                constant_(x, 0))
 
         self.fc_mean = init_(nn.Linear(num_inputs, num_outputs))
-        self.logstd = AddBias(torch.zeros(num_outputs))
+        self.logstd = torch.zeros(num_outputs)
         self.activation = activation
+
+    def update_entropy(self, entropy):
+        self.logstd = self.logstd.fill_(entropy / self.logstd.shape[0] - (0.5 + 0.5 * math.log(2 * math.pi)))
 
     def forward(self, x):
         action_mean = self.fc_mean(x)
@@ -49,5 +52,5 @@ class DiagGaussian(nn.Module):
         if x.is_cuda:
             zeros = zeros.cuda()
 
-        action_logstd = self.logstd(zeros)
+        action_logstd = self.logstd.to(action_mean.device)
         return FixedNormal(action_mean, action_logstd.exp())

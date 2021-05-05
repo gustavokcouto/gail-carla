@@ -79,6 +79,12 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
             utli.update_linear_schedule(
                 agent.optimizer, i_update, nupdates,
                 cl_args.lr)
+        
+        # decrease entropy linearly
+        entropy = utli.update_linear_entropy(
+            i_update, nupdates,
+            cl_args.init_entropy, cl_args.end_entropy)
+        actor_critic.update_entropy(entropy)
 
         for step in range(nbatch):
             time_step += 1

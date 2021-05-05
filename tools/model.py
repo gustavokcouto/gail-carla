@@ -19,6 +19,9 @@ class Policy(nn.Module):
         num_outputs = action_space.shape[0]
         self.dist = DiagGaussian(self.base.output_size, num_outputs, activation=activation)
 
+    def update_entropy(self, entropy):
+        self.dist.update_entropy(entropy)
+
     def act(self, obs, metrics, deterministic=False):
         value, actor_features = self.base(obs, metrics)
         dist = self.dist(actor_features)
