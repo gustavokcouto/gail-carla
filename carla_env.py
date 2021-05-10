@@ -159,7 +159,7 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, env_id=0):
+    def __init__(self, env_id=0, train=True):
         super(CarlaEnv, self).__init__()
         port = 2000 + 2 * env_id
         self._client = carla.Client('192.168.0.4', port)
@@ -199,6 +199,8 @@ class CarlaEnv(gym.Env):
         self._speed_controller = PIDController(K_P=5.0, K_I=0.5, K_D=1.0, n=40)
 
         set_sync_mode(self._client, True)
+
+        self.train = train
 
         self._spawn_player()
         self._setup_sensors()
@@ -259,9 +261,11 @@ class CarlaEnv(gym.Env):
                 trajectory = parse_routes_file(route_file)
                 self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(
                     self._world, trajectory)
-                random_start = np.random.randint(len(trajectory) - 2)
+                start = 0
+                if self.train:
+                    start = np.random.randint(len(trajectory) - 2)
                 global_plan_gps, global_plan_world_coord = interpolate_trajectory(
-                    self._world, trajectory[random_start:])
+                    self._world, trajectory[start:])
 
                 start_pose = global_plan_world_coord[0][0]
                 start_pose.location.z += 0.5

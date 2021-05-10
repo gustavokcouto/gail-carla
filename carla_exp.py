@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import tqdm
 import carla
-import cv2
 import torch
 import pandas as pd
 
@@ -22,7 +21,7 @@ from auto_pilot.route_manipulation import interpolate_trajectory
 def gen_trajectories(file_path=''):
     # Instantiate the env
     np.random.seed(1337)
-    env = CarlaEnv()
+    env = CarlaEnv(train=False)
 
     route_file = Path('data/route_00.xml')
     trajectory = parse_routes_file(route_file)
