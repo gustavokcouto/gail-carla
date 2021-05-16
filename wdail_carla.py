@@ -30,7 +30,7 @@ def argsparser():
 
     #ppo
     parser.add_argument('--num_processes', help='num_processes', type=int, default=8)
-    parser.add_argument('--num-steps', help='num-steps', type=int, default=3600)
+    parser.add_argument('--num-steps', help='num-steps', type=int, default=800)
     parser.add_argument('--lr', help='learning rate', type=float, default=2.5e-4)
     parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=4)
     parser.add_argument('--num-mini-batch', type=int, default=8, help='number of batches for ppo (default: 32)')
@@ -51,6 +51,7 @@ def argsparser():
     parser.add_argument('--num_trajs', help='num trajs', type=int, default=3)
     parser.add_argument('--subsample_frequency', help='num trajs', type=int, default=1)
     parser.add_argument('--log-interval', type=int, default=1, help='log interval, one log per n updates (default: 10)')
+    parser.add_argument('--eval_interval', type=int, default=3, help='eval interval, one eval per n updates (default: 10)')
 
     parser.add_argument('--bcgail', type=int, default=0)
     parser.add_argument('--decay', type=float, default=0.99)
@@ -72,6 +73,8 @@ def train(args):
     from tools import utli
     from tools import utils
     from tools.envs import make_vec_envs
+
+    from carla_env import CarlaEnv
 
     from collections import deque
     import time
@@ -98,6 +101,7 @@ def train(args):
         drop_last=True)
 
     envs = make_vec_envs(args.num_processes, device)
+    env_eval = CarlaEnv(eval=True)
 
     activation = None
     if args.use_activation:
@@ -139,6 +143,7 @@ def train(args):
 
     model = gailLearning_mujoco_origin(cl_args=cl_args,
                                        envs=envs,
+                                       env_eval=env_eval,
                                        actor_critic=actor_critic,
                                        agent=agent,
                                        discriminator=discr,

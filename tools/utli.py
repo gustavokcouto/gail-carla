@@ -56,11 +56,15 @@ results4train_gail = {
     'Train reward': 0.0,
     'Train steps': 0,
     'Expert reward': 0.0,
+    'Eval steps': 0.0,
+    'Eval reward': 0.0
 }
 def recordTrainResults_gail(results, time_step):
     results4train_gail['Train reward'] = results[0]
     results4train_gail['Train steps'] = results[1]
     results4train_gail['Expert reward'] = results[2]
+    results4train_gail['Eval steps'] = results[3]
+    results4train_gail['Eval reward'] = results[4]
 
     write2tensorboard(results=results4train_gail, time_step=time_step)
 

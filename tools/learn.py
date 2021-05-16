@@ -13,7 +13,7 @@ def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
 
 
-def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator, gail_train_loader, device, utli):
+def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, discriminator, gail_train_loader, device, utli):
 
     log_save_name = utli.Log_save_name4gail(cl_args)
     log_save_path = os.path.join("./runs", log_save_name)
@@ -68,6 +68,8 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
     start = time.time()
 
     best_episode = 0
+    steps_eval = 0
+    eval_reward = -100
     while i_update < nupdates:
 
         episode_t += 1
@@ -163,6 +165,29 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
         else:
             value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma = agent.update(rollouts)
 
+        if i_update % cl_args.eval_interval == 0:
+            done = False
+            obs, metrics = env_eval.reset()
+            steps_eval = 0
+            while not done:
+                obs = torch.from_numpy(obs).float().to(device)
+                obs = torch.stack([obs])
+                metrics = torch.from_numpy(metrics).float().to(device)
+                metrics = torch.stack([metrics])
+                with torch.no_grad():
+                    value, actions, action_log_prob = actor_critic.act(
+                        obs,
+                        metrics,
+                        deterministic=True
+                    )
+                action = actions.cpu().numpy()[0]
+
+                obs, metrics, reward, done, info = env_eval.step(action)
+                steps_eval += 1
+                maybeepinfo = info.get('episode')
+                if maybeepinfo:
+                    eval_reward = info['episode']['r']
+
         utli.recordLossResults(results=(value_loss,
                                         action_loss,
                                         dist_entropy,
@@ -181,11 +206,13 @@ def gailLearning_mujoco_origin(cl_args, envs, actor_critic, agent, discriminator
 
         utli.recordTrainResults_gail(results=(eprewmean,
                                               eplenmean,
-                                              np.mean(np.array(epgailbuf))),
+                                              np.mean(np.array(epgailbuf)),
+                                              steps_eval,
+                                              eval_reward),
                                 time_step=i_update)
 
-        if eplenmean > best_episode:
-            best_episode = eplenmean
+        if eval_reward > best_episode:
+            best_episode = eval_reward
             torch.save(actor_critic.state_dict(), 'carla_actor.pt')
 
         print("Episode: %d,   Time steps: %d,   Mean length: %d    Mean Reward: %f    Mean Gail Reward:%f"

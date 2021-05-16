@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tools.distributions import DiagGaussian
 from tools.utils import init
 
 class Flatten(nn.Module):
@@ -16,30 +17,32 @@ class Policy(nn.Module):
         num_outputs = action_space.shape[0]
         self.base = CNNBase(obs_shape, metrics_space, num_outputs)
 
+        std_dev = np.array([[0.06, 0.05]], dtype=np.float32)
+        self.std_dev = torch.Tensor(std_dev)
         self.max = torch.Tensor([1, 1])
         self.min = torch.Tensor([-1, 0])
-
     def act(self, obs, metrics, deterministic=False):
-        value, output, logstd = self.base(obs, metrics)
-        dist = torch.distributions.Normal(output, logstd.exp())
+        value, output = self.base(obs, metrics)
+        std_dev = self.std_dev.to(output)
+        dist = torch.distributions.Normal(output, std_dev)
+
         if deterministic:
             action = dist.mean
         else:
             action = dist.sample()
-
-        # action = torch.max(torch.min(action, self.max.to(action)), self.min.to(action))
+        
+        action = torch.max(torch.min(action, self.max.to(output)), self.min.to(output))
         action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
-
         return value, action, action_log_probs
 
     def get_value(self, obs, metrics):
-        value, _, _ = self.base(obs, metrics)
+        value, _ = self.base(obs, metrics)
         return value
 
     def evaluate_actions(self, obs, metrics, action):
-        value, output, logstd = self.base(obs, metrics)
-        dist = torch.distributions.Normal(output, logstd.exp())
-
+        value, output = self.base(obs, metrics)
+        std_dev = self.std_dev.to(output)
+        dist = torch.distributions.Normal(output, std_dev)
         action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
         dist_entropy = dist.entropy().sum(-1).mean()
 
@@ -78,7 +81,7 @@ class CNNBase(nn.Module):
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
         self.output_linear = init_(nn.Linear(hidden_size, num_outputs))
-        self.logstd = nn.Parameter(torch.zeros(num_outputs).unsqueeze(1))
+        self.logstd = AddBias(torch.zeros(num_outputs))
 
         self.train()
 
@@ -87,8 +90,5 @@ class CNNBase(nn.Module):
         x = self.trunk(torch.cat([x, metrics], dim=1))
         critic = self.critic_linear(x)
         output = self.output_linear(x)
-        zeros = torch.zeros(output.size()).to(output)
-        logstd = self.logstd.t().view(1, -1).to(output)
-        logstd = logstd + zeros
-        return critic, output, logstd
 
+        return critic, output

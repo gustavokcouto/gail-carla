@@ -159,10 +159,19 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, env_id=0, train=True):
+    def __init__(self, env_id=0, train=True, eval=False):
         super(CarlaEnv, self).__init__()
-        port = 2000 + 2 * env_id
-        self._client = carla.Client('192.168.0.4', port)
+        if env_id < 3:
+            port = 2000 + 2 * env_id
+            host = '192.168.0.4'
+        else:
+            port = 2000 + 2 * (env_id - 3)
+            host = '192.168.0.5'
+        if eval:
+            port = 2000
+            host = 'localhost'
+
+        self._client = carla.Client(host, port)
         self._client.set_timeout(30.0)
 
         set_sync_mode(self._client, False)
@@ -193,7 +202,7 @@ class CarlaEnv(gym.Env):
         self._waypoint_planner = RoutePlanner(1e-5, 5e-4)
         self._command_planner = RoutePlanner(1e-4, 2.5e-4, 258)
 
-        self.ep_length = 2400
+        self.ep_length = 500
         self.collision_sensor = None
         self.lane_sensor = None
         self._speed_controller = PIDController(K_P=5.0, K_I=0.5, K_D=1.0, n=40)
@@ -201,6 +210,7 @@ class CarlaEnv(gym.Env):
         set_sync_mode(self._client, True)
 
         self.train = train
+        self.eval = eval
 
         self._spawn_player()
         self._setup_sensors()
@@ -255,14 +265,16 @@ class CarlaEnv(gym.Env):
         self._sensors['imu'] = IMU(self._world, self._player)
 
     def get_start_position(self):
-        if self._command_planner.route_completed() or len(self._command_planner.route) == 0:
+        if (self._command_planner.route_completed()
+            or len(self._command_planner.route) == 0
+            or self.eval):
             if not self._player:
                 route_file = Path('data/route_00.xml')
                 trajectory = parse_routes_file(route_file)
                 self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(
                     self._world, trajectory)
                 start = 0
-                if self.train:
+                if self.train and not self.eval:
                     start = np.random.randint(len(trajectory) - 2)
                 global_plan_gps, global_plan_world_coord = interpolate_trajectory(
                     self._world, trajectory[start:])
@@ -403,11 +415,11 @@ class CarlaEnv(gym.Env):
         if self.collision:
             reward -= 5
 
-        if (not self.last_target is None) and (self.last_target != far_node).any():
+        if (not self.last_target is None) and (self.last_target != near_node).any():
             reward += 1
 
         self.episode_reward += reward
-        self.last_target = far_node
+        self.last_target = near_node
 
         self.route_completed = self._command_planner.route_completed()
         if (self.cur_length >= self.ep_length - 1
