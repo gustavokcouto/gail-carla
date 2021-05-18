@@ -42,8 +42,9 @@ class Policy(nn.Module):
 
         action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
         dist_entropy = dist.entropy().sum(-1).mean()
-
-        return value, action_log_probs, dist_entropy
+        steer_std = logstd[0, 0].detach().cpu()
+        throttle_std = logstd[0, 1].detach().cpu()
+        return value, action_log_probs, dist_entropy, steer_std, throttle_std
 
 
 class CNNBase(nn.Module):
@@ -78,7 +79,8 @@ class CNNBase(nn.Module):
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
         self.output_linear = init_(nn.Linear(hidden_size, num_outputs))
-        self.logstd = nn.Parameter(torch.zeros(num_outputs).unsqueeze(1))
+        # self.logstd = nn.Parameter(torch.Tensor([[-0.5, -0.1]]))
+        self.logstd = torch.Tensor([[-0.6, -0.2]])
 
         self.train()
 
@@ -87,8 +89,10 @@ class CNNBase(nn.Module):
         x = self.trunk(torch.cat([x, metrics], dim=1))
         critic = self.critic_linear(x)
         output = self.output_linear(x)
+        output[...,0] = torch.tanh(output[...,0])
+        output[...,1] = torch.sigmoid(output[...,1])
         zeros = torch.zeros(output.size()).to(output)
-        logstd = self.logstd.t().view(1, -1).to(output)
+        logstd = self.logstd.to(output)
         logstd = logstd + zeros
         return critic, output, logstd
 

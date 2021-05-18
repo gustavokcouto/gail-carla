@@ -53,6 +53,8 @@ class PPO():
         gail_action_loss_epoch = 0
         dist_entropy_epoch = 0
         bc_loss_epoch = 0
+        steer_std_epoch = 0
+        throttle_std_epoch = 0
 
         for e in range(self.ppo_epoch):
             data_generator = rollouts.feed_forward_generator(
@@ -64,7 +66,7 @@ class PPO():
                         adv_targ = sample
 
                 # Reshape to do in a single forward pass for all steps
-                values, action_log_probs, dist_entropy = self.actor_critic.evaluate_actions(
+                values, action_log_probs, dist_entropy, steer_std, throttle_std = self.actor_critic.evaluate_actions(
                     obs_batch, metrics_batch, actions_batch)
 
                 ratio = torch.exp(action_log_probs -
@@ -82,7 +84,7 @@ class PPO():
                         exp_action = Variable(exp_action).to(action_loss.device)
                         # Get BC loss
                         _exp_action = exp_action
-                        _, alogprobs, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, None, _exp_action)
+                        _, alogprobs, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, None, _exp_action)
                         bcloss = -alogprobs.mean()
 
                         bc_loss_epoch += bcloss.item()
@@ -113,6 +115,8 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                steer_std_epoch += steer_std.item()
+                throttle_std_epoch += throttle_std.item()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
@@ -121,10 +125,13 @@ class PPO():
         dist_entropy_epoch /= num_updates
         bc_loss_epoch /= num_updates
         gail_action_loss_epoch /= num_updates
+        steer_std_epoch /= num_updates
+        throttle_std_epoch /= num_updates
         last_gamma = self.gamma
 
         if self.gamma is not None:
             self.gamma *= self.decay
 
         
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, bc_loss_epoch, gail_action_loss_epoch, self.gamma
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, bc_loss_epoch, \
+            gail_action_loss_epoch, self.gamma, steer_std_epoch,  throttle_std_epoch
