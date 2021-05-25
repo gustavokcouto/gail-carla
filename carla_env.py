@@ -327,7 +327,7 @@ class CarlaEnv(gym.Env):
         self.collision = False
         self.route_completed = False
         self.episode_reward = 0
-        self.last_target = None
+        self.last_route_metrics = 0
 
         obs, metrics, _, _, _ = self.step(None)
 
@@ -370,7 +370,7 @@ class CarlaEnv(gym.Env):
         gps = result['gnss']
         compass = result['imu'][-1]
 
-        near_node, _, _ = self._waypoint_planner.run_step(gps)
+        _, _, _ = self._waypoint_planner.run_step(gps)
         far_node, road_option, _ = self._command_planner.run_step(gps)
 
         rotation_matrix = np.array([
@@ -415,13 +415,14 @@ class CarlaEnv(gym.Env):
         if self.collision:
             reward -= 5
 
-        if (not self.last_target is None) and (self.last_target != near_node).any():
-            reward += 1
+        route_metrics = self._waypoint_planner.route_completion()
+        if self.last_route_metrics != route_metrics:
+            reward += route_metrics - self.last_route_metrics
 
         self.episode_reward += reward
-        self.last_target = near_node
+        self.last_route_metrics = route_metrics
 
-        self.route_completed = self._command_planner.route_completed()
+        self.route_completed = self._waypoint_planner.route_completed()
         if (self.cur_length >= self.ep_length - 1
             or self.route_completed
             or self.collision

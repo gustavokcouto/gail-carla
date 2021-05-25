@@ -79,7 +79,7 @@ class CNNBase(nn.Module):
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
         self.output_linear = init_(nn.Linear(hidden_size, num_outputs))
-        # self.logstd = nn.Parameter(torch.Tensor([[-0.5, -0.1]]))
+        # self.logstd = nn.Parameter(torch.Tensor([[0.0, 0.0]]))
         self.logstd = torch.Tensor([[-0.6, -0.2]])
 
         self.train()

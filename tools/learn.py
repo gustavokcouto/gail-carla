@@ -109,6 +109,7 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
                 rollouts.obs[-1], rollouts.metrics[-1]).detach()
 
         # gail
+        disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(gail_train_loader, rollouts)
         gail_epoch = cl_args.gail_epoch
         if i_update <= 6:
             gail_epoch = 25 - (i_update - 1) * 4  # Warm up
@@ -137,7 +138,10 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
                                             np.mean(np.array(dis_losses)),
                                             np.mean(np.array(dis_gps)),
                                             np.mean(np.array(expert_losses)),
-                                            np.mean(np.array(policy_losses))),
+                                            np.mean(np.array(policy_losses)),
+                                            disc_pre_loss,
+                                            expert_pre_reward,
+                                            policy_pre_reward),
                                     time_step=i_update)
 
 

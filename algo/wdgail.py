@@ -45,7 +45,7 @@ class Discriminator(nn.Module):
         self.trunk.train()
 
         self.max_grad_norm = max_grad_norm
-        self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()), lr=2.5e-3, eps=0.99)
+        self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()), lr=1.0e-3, eps=0.99)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
 
@@ -96,9 +96,8 @@ class Discriminator(nn.Module):
         grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
 
-    def update(self, expert_loader, rollouts, obsfilt=None):
+    def update(self, expert_loader, rollouts):
         self.train()
-        assert obsfilt is None
 
         policy_data_generator = rollouts.feed_forward_generator(
             None, mini_batch_size=expert_loader.batch_size)
@@ -109,8 +108,8 @@ class Discriminator(nn.Module):
         g_loss =0.0
         gp =0.0
         n = 0
-        policy_rewards = np.array([])
-        expert_rewards = np.array([])
+        policy_reward = 0
+        expert_reward = 0
         for expert_batch, policy_batch in zip(expert_loader,
                                               policy_data_generator):
             policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[2]
@@ -118,8 +117,7 @@ class Discriminator(nn.Module):
             pol_state = self.main(policy_state)
             policy_d = self.trunk(
                 torch.cat([pol_state, policy_metrics, policy_action], dim=1))
-            policy_batch_reward = policy_d.detach().cpu().numpy().reshape(-1)
-            policy_rewards = np.concatenate((policy_rewards, policy_batch_reward), axis=0)
+            policy_reward += policy_d.sum().item()
 
             expert_state, expert_metrics, expert_action = expert_batch
 
@@ -129,8 +127,7 @@ class Discriminator(nn.Module):
             exp_state = self.main(expert_state)
             expert_d = self.trunk(
                 torch.cat([exp_state, expert_metrics, expert_action], dim=1))
-            expert_batch_rewards = expert_d.detach().cpu().numpy().reshape(-1)
-            expert_rewards = np.concatenate((expert_rewards, expert_batch_rewards), axis=0)
+            expert_reward += expert_d.sum().item()
 
             # expert_loss = F.binary_cross_entropy_with_logits(
             #     expert_d,
@@ -141,18 +138,19 @@ class Discriminator(nn.Module):
             expert_loss = torch.mean(torch.tanh(expert_d)).to(self.device)
             policy_loss = torch.mean(torch.tanh(policy_d)).to(self.device)
 
-            expert_ac_loss += (expert_loss).item()
-            policy_ac_loss += (policy_loss).item()
+            n_samples = policy_state.shape[0]
+            expert_ac_loss += (expert_loss).item() * n_samples
+            policy_ac_loss += (policy_loss).item() * n_samples
             # gail_loss = expert_loss + policy_loss
             wd = expert_loss - policy_loss
             grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
                                              policy_state, policy_metrics, policy_action)
 
             # loss += (gail_loss + grad_pen).item()
-            loss += (-wd + grad_pen).item()
-            g_loss += (wd).item()
-            gp += (grad_pen).item()
-            n += 1
+            loss += (-wd + grad_pen).item() * n_samples
+            g_loss += (wd).item() * n_samples
+            gp += (grad_pen).item() * n_samples
+            n += n_samples
 
             self.optimizer.zero_grad()
             # (gail_loss + grad_pen).backward()
@@ -161,7 +159,41 @@ class Discriminator(nn.Module):
             nn.utils.clip_grad_norm_(self.trunk.parameters(), self.max_grad_norm)
             self.optimizer.step()
 
-        return loss / n, policy_rewards.mean(), expert_rewards.mean(), g_loss/n, gp/n, expert_ac_loss / n, policy_ac_loss / n
+        return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, expert_ac_loss / n, policy_ac_loss / n
+
+    def compute_loss(self, expert_loader, rollouts):
+        with torch.no_grad():
+            policy_data_generator = rollouts.feed_forward_generator(
+                None, mini_batch_size=expert_loader.batch_size)
+            total_loss = 0
+            policy_reward = 0
+            expert_reward = 0
+
+            n = 0
+            for expert_batch, policy_batch in zip(expert_loader,
+                                                policy_data_generator):
+                policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[2]
+
+                pol_state = self.main(policy_state)
+                policy_d = self.trunk(
+                    torch.cat([pol_state, policy_metrics, policy_action], dim=1))
+
+                expert_state, expert_metrics, expert_action = expert_batch
+                expert_state = expert_state.to(self.device)
+                expert_metrics = expert_metrics.to(self.device)
+                expert_action = expert_action.to(self.device)
+                exp_state = self.main(expert_state)
+                expert_d = self.trunk(
+                    torch.cat([exp_state, expert_metrics, expert_action], dim=1))
+                expert_loss = torch.tanh(expert_d)
+                policy_loss = torch.tanh(policy_d)
+                expert_reward += expert_loss.sum().item()
+                policy_reward += policy_loss.sum().item()
+                wd = expert_loss - policy_loss
+                total_loss += wd.sum().item()
+                n += policy_state.shape[0]
+
+            return total_loss/n, expert_reward/n, policy_reward/n
 
     def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
         with torch.no_grad():

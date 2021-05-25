@@ -62,7 +62,7 @@ class RoutePlanner(object):
             self.route.append((gps_pos, cmd, pos))
 
     def route_completion(self):
-        return 1 - len(self.route)/self.route_size
+        return self.route_size - len(self.route)
 
     def route_completed(self):
         return len(self.route) == 2
