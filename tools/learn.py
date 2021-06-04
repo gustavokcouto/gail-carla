@@ -13,9 +13,9 @@ def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
 
 
-def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, discriminator, gail_train_loader, device, utli):
+def gailLearning_mujoco_origin(run_params, envs, env_eval, actor_critic, agent, discriminator, gail_train_loader, device, utli):
 
-    log_save_name = utli.Log_save_name4gail(cl_args)
+    log_save_name = utli.Log_save_name4gail(run_params)
     log_save_path = os.path.join("./runs", log_save_name)
     if os.path.exists(log_save_path):
         shutil.rmtree(log_save_path)
@@ -32,22 +32,22 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
     count = 0
 
     # begin optimize
-    nsteps = cl_args.num_steps
+    nsteps = run_params['num_steps']
     S_time = time.time()
 
-    nenv = cl_args.num_processes
+    nenv = run_params['num_processes']
 
     nbatch = np.floor(nsteps/nenv)
     nbatch = nbatch.astype(np.int16)
 
     # The buffer
     rollouts = RolloutStorage(nbatch,
-                              cl_args.num_processes,
+                              run_params['num_processes'],
                               envs.observation_space.shape,
                               envs.metrics_space.shape,
                               envs.action_space)
 
-    nupdates = np.floor(cl_args.num_env_steps / nsteps)
+    nupdates = np.floor(run_params['num_env_steps'] / nsteps)
     nupdates = nupdates.astype(np.int16)
 
     epinfobuf = deque(maxlen=10)
@@ -56,7 +56,7 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
 
     episode_rewards = deque(maxlen=10)
 
-    cum_gailrewards = [.0 for _ in range(cl_args.num_processes)]
+    cum_gailrewards = [.0 for _ in range(run_params['num_processes'])]
 
     i_update = 0
 
@@ -76,18 +76,21 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
         i_update += 1
         epinfos = []
 
-        if cl_args.use_linear_lr_decay:
+        if run_params['use_linear_lr_decay']:
             # decrease learning rate linearly
             utli.update_linear_schedule(
                 agent.optimizer, i_update, nupdates,
-                cl_args.lr)
+                run_params['lr'])
+
+        actor_critic.set_epoch(i_update)
 
         for step in range(nbatch):
             time_step += 1
 
             # Sample actions
             with torch.no_grad():
-                value, action, action_log_prob = actor_critic.act(rollouts.obs[step], rollouts.metrics[step])
+                value, action, action_log_prob = actor_critic.act(
+                    rollouts.obs[step], rollouts.metrics[step])
 
             obs, metrics, rewards, done, infos = envs.step(action)
 
@@ -101,7 +104,8 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
             masks = torch.FloatTensor(
                 [[0.0] if done_ else [1.0] for done_ in done])
 
-            rollouts.insert(obs, metrics, action, action_log_prob, value, rewards, masks)
+            rollouts.insert(obs, metrics, action,
+                            action_log_prob, value, rewards, masks)
 
         print('finished sim')
         with torch.no_grad():
@@ -109,12 +113,13 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
                 rollouts.obs[-1], rollouts.metrics[-1]).detach()
 
         # gail
-        disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(gail_train_loader, rollouts)
-        gail_epoch = cl_args.gail_epoch
-        if i_update <= 6:
-            gail_epoch = 25 - (i_update - 1) * 4  # Warm up
-        else:
-            gail_epoch = 5
+        disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
+            gail_train_loader, rollouts)
+        gail_epoch = run_params['gail_epoch']
+        if i_update < run_params['gail_thre']:
+            gail_epoch += (run_params['gail_pre_epoch'] - run_params['gail_epoch']) * \
+                (run_params['gail_thre'] - (i_update - 1)) / run_params['gail_thre']  # Warm up
+            gail_epoch = int(gail_epoch)
         dis_total_losses = []
         policy_rewards = []
         expert_rewards = []
@@ -123,7 +128,8 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
         expert_losses = []
         policy_losses = []
         for _ in range(gail_epoch):
-            dis_total_loss, policy_mean_reward, expert_reward_mean, dis_loss, dis_gp, expert_loss, policy_loss = discriminator.update(gail_train_loader, rollouts)
+            dis_total_loss, policy_mean_reward, expert_reward_mean, dis_loss, dis_gp, expert_loss, policy_loss = discriminator.update(
+                gail_train_loader, rollouts)
             dis_total_losses.append(dis_total_loss)
             policy_rewards.append(policy_mean_reward)
             expert_rewards.append(expert_reward_mean)
@@ -133,43 +139,44 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
             policy_losses.append(policy_loss)
 
         utli.recordDisLossResults(results=(np.mean(np.array(dis_total_losses)),
-                                            np.mean(np.array(policy_rewards)),
-                                            np.mean(np.array(expert_rewards)),
-                                            np.mean(np.array(dis_losses)),
-                                            np.mean(np.array(dis_gps)),
-                                            np.mean(np.array(expert_losses)),
-                                            np.mean(np.array(policy_losses)),
-                                            disc_pre_loss,
-                                            expert_pre_reward,
-                                            policy_pre_reward),
-                                    time_step=i_update)
-
+                                           np.mean(np.array(policy_rewards)),
+                                           np.mean(np.array(expert_rewards)),
+                                           np.mean(np.array(dis_losses)),
+                                           np.mean(np.array(dis_gps)),
+                                           np.mean(np.array(expert_losses)),
+                                           np.mean(np.array(policy_losses)),
+                                           disc_pre_loss,
+                                           expert_pre_reward,
+                                           policy_pre_reward),
+                                  time_step=i_update)
 
         for step in range(nbatch):
             rollouts.gail_rewards[step] = discriminator.predict_reward(
                 rollouts.obs[step],
                 rollouts.metrics[step],
                 rollouts.actions[step],
-                cl_args.gamma,
+                run_params['gamma'],
                 rollouts.masks[step])
 
-            for i_env in range(cl_args.num_processes):
+            for i_env in range(run_params['num_processes']):
                 if rollouts.masks[step][i_env]:
-                        cum_gailrewards[i_env] += rollouts.gail_rewards[step][i_env].item()
+                    cum_gailrewards[i_env] += rollouts.gail_rewards[step][i_env].item()
                 else:
                     epgailbuf.append(cum_gailrewards[i_env])
-                    cum_gailrewards[i_env]=.0
+                    cum_gailrewards[i_env] = .0
 
         # compute returns
-        rollouts.compute_returns(next_value, cl_args.gamma, cl_args.gae_lambda)
+        rollouts.compute_returns(next_value, run_params['gamma'], run_params['gae_lambda'])
 
         # training PPO policy
-        if cl_args.bcgail:
-            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(rollouts, gail_train_loader)
+        if run_params['bcgail']:
+            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
+                rollouts, gail_train_loader)
         else:
-            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(rollouts)
+            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
+                rollouts)
 
-        if i_update % cl_args.eval_interval == 0:
+        if i_update % run_params['eval_interval'] == 0:
             done = False
             obs, metrics = env_eval.reset()
             steps_eval = 0
@@ -203,7 +210,6 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
                                time_step=i_update)
         rollouts.after_update()
 
-
         epinfobuf.extend(epinfos)
         if not len(epinfobuf):
             continue
@@ -215,17 +221,17 @@ def gailLearning_mujoco_origin(cl_args, envs, env_eval, actor_critic, agent, dis
                                               np.mean(np.array(epgailbuf)),
                                               steps_eval,
                                               eval_reward),
-                                time_step=i_update)
+                                     time_step=i_update)
 
         if eval_reward > best_episode:
             best_episode = eval_reward
             torch.save(actor_critic.state_dict(), 'carla_actor.pt')
 
         print("Episode: %d,   Time steps: %d,   Mean length: %d    Mean Reward: %f    Mean Gail Reward:%f"
-            % (episode_t, time_step, eplenmean, eprewmean, np.mean(np.array(epgailbuf))))
+              % (episode_t, time_step, eplenmean, eprewmean, np.mean(np.array(epgailbuf))))
 
-        if i_update % cl_args.log_interval == 0 and len(episode_rewards) > 1:
-            total_num_steps = (i_update + 1) * cl_args.num_steps
+        if i_update % run_params['log_interval'] == 0 and len(episode_rewards) > 1:
+            total_num_steps = (i_update + 1) * run_params['num_steps']
             end = time.time()
             print(
                 "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"

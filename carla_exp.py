@@ -21,7 +21,7 @@ from auto_pilot.route_manipulation import interpolate_trajectory
 def gen_trajectories(file_path=''):
     # Instantiate the env
     np.random.seed(1337)
-    env = CarlaEnv(train=False)
+    env = CarlaEnv(train=False, eval=True)
 
     route_file = Path('data/route_00.xml')
     trajectory = parse_routes_file(route_file)

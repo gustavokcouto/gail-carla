@@ -85,15 +85,15 @@ def write2tensorboard(results, time_step):
         writer.add_scalar(title, results[title], time_step)
 
 
-def Log_save_name4gail(cl_args):
+def Log_save_name4gail(run_params):
 
-    save_name = cl_args.algo + '_' + cl_args.env_name + \
+    save_name = run_params['algo'] + '_' + run_params['env_name'] + \
                 '_seed_{}_num_trajs_{}_subsample_frequency_{}_gail_{}_{}'\
-                    .format(cl_args.seed,
-                            cl_args.num_trajs,
-                            cl_args.subsample_frequency,
-                            cl_args.gail_batch_size,
-                            cl_args.gail_epoch
+                    .format(run_params['seed'],
+                            run_params['num_trajs'],
+                            run_params['subsample_frequency'],
+                            run_params['gail_batch_size'],
+                            run_params['gail_epoch']
                             )
     return save_name
 

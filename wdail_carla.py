@@ -4,62 +4,106 @@ See README for usage.
 
 import argparse
 import torch
-
-try:
-    from mpi4py import MPI
-except ImportError:
-    MPI = None
+import json
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-## GAIL baseline
+# GAIL baseline
 # python main.py --env-name CarRacing-v0 --algo ppo --gail --gail-experts-dir /serverdata/rohit/BCGAIL/CarRacingPPO/ --use-gae --lr 2.5e-4 --clip-param 0.1 --value-loss-coef 0.5 --num-processes 8 --num-steps 128 --num-mini-batch 4 --log-interval 1 --use-linear-lr-decay --entropy-coef 0.01 --model_name CarRacingGAIL --gail-batch-size 32
 # python main.py --env-name CarRacing-v0 --algo ppo --gail --gail-experts-dir /serverdata/rohit/BCGAIL/CarRacingPPO/ --use-gae --lr 2.5e-4 --clip-param 0.1 --value-loss-coef 0.5 --num-processes 8 --num-steps 128 --num-mini-batch 4 --log-interval 1 --use-linear-lr-decay --entropy-coef 0.01 --model_name CarRacingBCGAIL0.125 --gail-batch-size 32 --bcgail 1 --gailgamma 0.125 --decay 1 --num-env-steps 1000000 --seed 1
 
 # set key parameters
-def argsparser():
-    parser = argparse.ArgumentParser("WDAIL")
-    parser.add_argument('--env_name', help='environment ID', default='carla')
-    parser.add_argument('--algo', help='algorithm ID', default='WDAIL')
-    # general
-    parser.add_argument('--num_env_steps', help='total steps', type=int, default=10e6)
-    parser.add_argument('--cuda', help='num_model', type=int, default=0)
-    parser.add_argument('--seed', help='seed', type=int, default=1)
-    parser.add_argument('--use_linear_lr_decay', help='use linear lr decay', type=bool, default=False)
 
-    #ppo
-    parser.add_argument('--num_processes', help='num_processes', type=int, default=8)
-    parser.add_argument('--num-steps', help='num-steps', type=int, default=800)
-    parser.add_argument('--lr', help='learning rate', type=float, default=2.5e-4)
-    parser.add_argument('--ppo_epoch', help='ppo epoch num', type=int, default=4)
-    parser.add_argument('--num-mini-batch', type=int, default=8, help='number of batches for ppo (default: 32)')
-    parser.add_argument('--clip-param', type=float, default=0.1, help='ppo clip parameter (default: 0.2)')
-    parser.add_argument('--eps', type=float, default=1e-5, help='RMSprop optimizer epsilon (default: 1e-5)')
-    parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for rewards (default: 0.99)')
-    parser.add_argument('--gae-lambda', type=float, default=0.95, help='gae lambda parameter (default: 0.95)')
-    parser.add_argument('--entropy-coef', type=float, default=0.0, help='entropy term coefficient (default: 0.01)')
-    parser.add_argument('--value-loss-coef', type=float, default=0.5, help='value loss coefficient (default: 0.5)')
-    parser.add_argument('--max-grad-norm', type=float, default=0.5, help='max norm of gradients (default: 0.5)')
 
-    # gail
-    parser.add_argument('--expert_path', help='trajs path', type=str, default='../data/ikostirkov/trajs_ant.h5')
-    parser.add_argument('--gail-experts-dir',default='./gail_experts', help='directory that contains expert demonstrations for gail')
-    parser.add_argument('--gail_batch_size', type=int, default=128, help='gail batch size (default: 128)')
-    parser.add_argument('--gail_epoch', help='number of steps to train discriminator in each epoch', type=int, default=5)
-    parser.add_argument('--gail-max-grad-norm', type=float, default=0.5, help='max norm of gradients (default: 0.5)')
-    parser.add_argument('--num_trajs', help='num trajs', type=int, default=15)
-    parser.add_argument('--subsample_frequency', help='num trajs', type=int, default=1)
-    parser.add_argument('--log-interval', type=int, default=1, help='log interval, one log per n updates (default: 10)')
-    parser.add_argument('--eval_interval', type=int, default=3, help='eval interval, one eval per n updates (default: 10)')
+def read_params():
+    params = {
+        # environment ID
+        'env_name': 'carla',
+        # algorithm ID
+        'algo': 'WDAIL',
 
-    parser.add_argument('--bcgail', type=int, default=0)
-    parser.add_argument('--decay', type=float, default=0.99)
-    parser.add_argument('--gailgamma', type=float, default=0.125)
-    parser.add_argument('--use_activation', default=0, type=int, help='Use final activation? (Useful for certain scenarios)')
-    return parser.parse_args()
+        # general
+        # total steps
+        'num_env_steps': 10e6,
+        # num_model
+        'cuda': 0,
+        # seed
+        'seed': 1,
+        # use linear lr decay
+        'use_linear_lr_decay': False,
 
-def train(args):
+        # ppo
+        # num_processes
+        'num_processes': 8,
+        # num-steps
+        'num_steps': 800,
+        # learning rate
+        'lr': 2.5e-4,
+        # ppo epoch num
+        'ppo_epoch': 4,
+        # number of batches for ppo (default: 32)
+        'num_mini_batch': 8,
+        # ppo clip parameter (default: 0.2)
+        'clip_param': 0.1,
+        # RMSprop optimizer epsilon (default: 1e-5)
+        'eps': 1e-5,
+        # discount factor for rewards (default: 0.99)
+        'gamma': 0.99,
+        # gae lambda parameter (default: 0.95)
+        'gae_lambda': 0.95,
+        # entropy term coefficient (default: 0.01)
+        'entropy_coef': 0.0,
+        # value loss coefficient (default: 0.5)
+        'value_loss_coef': 0.5,
+        # max norm of gradients (default: 0.5)
+        'max_grad_norm': 0.5,
+
+        # gail
+        # directory that contains expert demonstrations for gail
+        'gail_experts_dir': './gail_experts',
+        # gail batch size (default: 128)
+        'gail_batch_size': 128,
+        # gail learning rate
+        'gail_lr': 2.5e-4,
+        # RMSprop optimizer epsilon (default: 1e-5)
+        'gail_eps': 1e-5,
+        # GAIL Optimizer beta1 param
+        'gail_beta1': 0.9,
+        # duration of gail pre epoch
+        'gail_thre': 5,
+        # number of steps to train discriminator during pre epoch
+        'gail_pre_epoch': 25,
+        # number of steps to train discriminator in each epoch
+        'gail_epoch': 5,
+        # max norm of gradients (default: 0.5)
+        # betas = (.9, .99)
+        # (0.5, 0.999)
+        'gail_max_grad_norm': 0.5,
+        # num trajs
+        'num_trajs': 5,
+        # trajectories subsample frequency
+        'subsample_frequency': 1,
+        # log interval, one log per n updates (default: 10)
+        'log_interval': 1,
+        # eval interval, one eval per n updates (default: 10)
+        'eval_interval': 3,
+
+        # bcgail
+        'bcgail': 0,
+        'decay': 0.99,
+        'gailgamma': 0.125,
+        # Use final activation? (Useful for certain scenarios)
+        'use_activation': 0
+    }
+
+    config_file = open('params.json')
+    config = json.load(config_file)
+    params.update(config)
+    return params
+
+
+def train(params):
 
     # from ppo_gail_iko.algo.ppo4multienvs import PPO, ReplayBuffer
     from algo.ppo import PPO
@@ -80,31 +124,31 @@ def train(args):
     import time
     import numpy as np
 
-
     # from nets.network import ActorCritic_mujoco as ActorCritic
-    cl_args = args
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
+    run_params = params
+    np.random.seed(params['seed'])
+    torch.manual_seed(params['seed'])
+    torch.cuda.manual_seed_all(params['seed'])
 
-    device = torch.device('cuda:'+ str(cl_args.cuda) if torch.cuda.is_available() else 'cpu')
+    device = torch.device(
+        'cuda:' + str(params['cuda']) if torch.cuda.is_available() else 'cpu')
 
     file_name = os.path.join(
-        args.gail_experts_dir, "trajs_{}.pt".format(
-            args.env_name.split('-')[0].lower()))
+        params['gail_experts_dir'], "trajs_{}.pt".format(
+            params['env_name'].split('-')[0].lower()))
 
     gail_train_loader = torch.utils.data.DataLoader(
         ExpertDataset(
-        file_name, num_trajectories=args.num_trajs, subsample_frequency=args.subsample_frequency),
-        batch_size=args.gail_batch_size,
+            file_name, num_trajectories=params['num_trajs'], subsample_frequency=params['subsample_frequency']),
+        batch_size=params['gail_batch_size'],
         shuffle=True,
         drop_last=True)
 
-    envs = make_vec_envs(args.num_processes, device)
+    envs = make_vec_envs(params['num_processes'], device)
     env_eval = CarlaEnv(eval=True)
 
     activation = None
-    if args.use_activation:
+    if params['use_activation']:
         activation = torch.tanh
 
     # network
@@ -119,18 +163,18 @@ def train(args):
 
     agent = PPO(
         actor_critic,
-        args.clip_param,
-        args.ppo_epoch,
-        args.num_mini_batch,
-        args.value_loss_coef,
-        args.entropy_coef,
+        params['clip_param'],
+        params['ppo_epoch'],
+        params['num_mini_batch'],
+        params['value_loss_coef'],
+        params['entropy_coef'],
         device,
-        lr=args.lr,
-        eps=args.eps,
-        gamma=args.gailgamma,
-        decay=args.decay,
+        lr=params['lr'],
+        eps=params['eps'],
+        gamma=params['gailgamma'],
+        decay=params['decay'],
         act_space=envs.action_space,
-        max_grad_norm=args.max_grad_norm)
+        max_grad_norm=params['max_grad_norm'])
 
     # discriminator
     discr = Discriminator(
@@ -139,9 +183,12 @@ def train(args):
         envs.action_space,
         100,
         device,
-        args.gail_max_grad_norm)
+        params['gail_lr'],
+        params['gail_eps'],
+        params['gail_beta1'],
+        params['gail_max_grad_norm'])
 
-    model = gailLearning_mujoco_origin(cl_args=cl_args,
+    model = gailLearning_mujoco_origin(run_params=run_params,
                                        envs=envs,
                                        env_eval=env_eval,
                                        actor_critic=actor_critic,
@@ -154,13 +201,14 @@ def train(args):
     return 0
 
 
-def main(args):
+def main(params):
 
-    model, env = train(args)
+    model, env = train(params)
 
     return model
 
+
 if __name__ == '__main__':
 
-    args = argsparser()
-    main(args)
+    params = read_params()
+    main(params)
