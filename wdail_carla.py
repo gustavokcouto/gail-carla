@@ -67,13 +67,13 @@ def read_params():
         # gail learning rate
         'gail_lr': 2.5e-4,
         # RMSprop optimizer epsilon (default: 1e-5)
-        'gail_eps': 1e-5,
+        'gail_eps': 1e-3,
         # GAIL Optimizer beta1 param
-        'gail_beta1': 0.9,
+        'gail_beta1': 0.5,
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 25,
+        'gail_pre_epoch': 5,
         # number of steps to train discriminator in each epoch
         'gail_epoch': 5,
         # max norm of gradients (default: 0.5)

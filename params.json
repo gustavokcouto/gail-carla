@@ -1,6 +1,2 @@
 {
-    "gail_eps": 1e-3,
-    "gail_pre_epoch": 5,
-    "gail_lr": 5e-5,
-    "gail_beta1": 0.5
 }
