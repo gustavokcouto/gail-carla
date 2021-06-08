@@ -86,6 +86,7 @@ class CNNBase(nn.Module):
         self.logstd0 = torch.Tensor([[-0.6, -0.2]])
         self.logstd1 = torch.Tensor([[-1.4, -1.0]])
         self.logstd2 = torch.Tensor([[-2.0, -1.8]])
+        self.logstd3 = torch.Tensor([[-2.8, -3.0]])
 
         self.train()
 
@@ -97,15 +98,10 @@ class CNNBase(nn.Module):
         x = self.trunk(torch.cat([x, metrics], dim=1))
         critic = self.critic_linear(x)
         output = self.output_linear(x)
-        # output[...,0] = torch.tanh(output[...,0])
-        # output[...,1] = torch.sigmoid(output[...,1])
+        output[...,0] = torch.tanh(output[...,0])
+        output[...,1] = torch.sigmoid(output[...,1])
         zeros = torch.zeros(output.size()).to(output)
-        if self.epoch < 250:
-            logstd = self.logstd0.to(output)
-        elif self.epoch < 500:
-            logstd = self.logstd1.to(output)
-        else:
-            logstd = self.logstd2.to(output)  
+        logstd = self.logstd2.to(output)
         logstd = logstd + zeros
         return critic, output, logstd
 

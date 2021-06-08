@@ -73,9 +73,9 @@ def read_params():
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 5,
+        'gail_pre_epoch': 50,
         # number of steps to train discriminator in each epoch
-        'gail_epoch': 5,
+        'gail_epoch': 10,
         # max norm of gradients (default: 0.5)
         # betas = (.9, .99)
         # (0.5, 0.999)
