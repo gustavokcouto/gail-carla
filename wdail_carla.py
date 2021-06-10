@@ -73,15 +73,15 @@ def read_params():
         # gail learning rate
         'gail_lr': 2.5e-4,
         # ADAM optimizer epsilon (default: 1e-5)
-        'gail_eps': 1e-1,
+        'gail_eps': 1e-8,
         # GAIL Optimizer betas param
-        'gail_betas': [0.5, 0.9],
+        'gail_betas': [0.9, 0.99],
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 50,
+        'gail_pre_epoch': 25,
         # number of steps to train discriminator in each epoch
-        'gail_epoch': 10,
+        'gail_epoch': 5,
         # max norm of gradients (default: 0.5)
         'gail_max_grad_norm': 0.5,
         # num trajs
