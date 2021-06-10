@@ -25,15 +25,11 @@ def gailLearning_mujoco_origin(run_params, envs, env_eval, actor_critic, agent, 
     evaluations = []
     # begin optimize
 
-    reward_window4Evaluate = deque(maxlen=10)
     time_step = 0
     episode_t = 0
-    episode_timesteps = 0
-    count = 0
 
     # begin optimize
     nsteps = run_params['num_steps']
-    S_time = time.time()
 
     nenv = run_params['num_processes']
 

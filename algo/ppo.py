@@ -16,6 +16,7 @@ class PPO():
                  device,
                  lr=None,
                  eps=None,
+                 betas=None,
                  max_grad_norm=None,
                  use_clipped_value_loss=True,
                  gamma=None,
@@ -41,7 +42,7 @@ class PPO():
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
 
-        self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
+        self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps, betas=betas)
 
     def update(self, rollouts, expert_dataset=None):
         # Expert dataset in case the BC update is required

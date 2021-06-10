@@ -202,7 +202,7 @@ class CarlaEnv(gym.Env):
         self._waypoint_planner = RoutePlanner(1e-5, 5e-4)
         self._command_planner = RoutePlanner(1e-4, 2.5e-4, 258)
 
-        self.ep_length = 500
+        self.ep_length = 2400
         self.collision_sensor = None
         self.lane_sensor = None
         self._speed_controller = PIDController(K_P=5.0, K_I=0.5, K_D=1.0, n=40)

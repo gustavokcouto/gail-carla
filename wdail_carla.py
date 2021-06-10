@@ -37,7 +37,7 @@ def read_params():
         # num_processes
         'num_processes': 10,
         # num-steps
-        'num_steps': 800,
+        'num_steps': 2400,
         # learning rate
         'lr': 2.5e-4,
         # ppo epoch num
@@ -46,18 +46,24 @@ def read_params():
         'num_mini_batch': 8,
         # ppo clip parameter (default: 0.2)
         'clip_param': 0.1,
-        # RMSprop optimizer epsilon (default: 1e-5)
+        # ADAM optimizer epsilon (default: 1e-5)
         'eps': 1e-5,
+        # ADAM Optimizer betas param
+        'betas': [0.9, 0.99],
         # discount factor for rewards (default: 0.99)
         'gamma': 0.99,
         # gae lambda parameter (default: 0.95)
         'gae_lambda': 0.95,
         # entropy term coefficient (default: 0.01)
         'entropy_coef': 0.0,
+        # variable entropy (std dev as net parameter)
+        'var_ent': False,
         # value loss coefficient (default: 0.5)
         'value_loss_coef': 0.5,
         # max norm of gradients (default: 0.5)
         'max_grad_norm': 0.5,
+        # Model log std deviation
+        'logstd': [-0.6, -0.2],
 
         # gail
         # directory that contains expert demonstrations for gail
@@ -66,10 +72,10 @@ def read_params():
         'gail_batch_size': 128,
         # gail learning rate
         'gail_lr': 2.5e-4,
-        # RMSprop optimizer epsilon (default: 1e-5)
-        'gail_eps': 1e-3,
-        # GAIL Optimizer beta1 param
-        'gail_beta1': 0.5,
+        # ADAM optimizer epsilon (default: 1e-5)
+        'gail_eps': 1e-1,
+        # GAIL Optimizer betas param
+        'gail_betas': [0.5, 0.9],
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
@@ -77,11 +83,9 @@ def read_params():
         # number of steps to train discriminator in each epoch
         'gail_epoch': 10,
         # max norm of gradients (default: 0.5)
-        # betas = (.9, .99)
-        # (0.5, 0.999)
         'gail_max_grad_norm': 0.5,
         # num trajs
-        'num_trajs': 5,
+        'num_trajs': 3,
         # trajectories subsample frequency
         'subsample_frequency': 1,
         # log interval, one log per n updates (default: 10)
@@ -94,7 +98,7 @@ def read_params():
         'decay': 0.99,
         'gailgamma': 0.125,
         # Use final activation? (Useful for certain scenarios)
-        'use_activation': 0
+        'use_activation': True
     }
 
     config_file = open('params.json')
@@ -147,16 +151,14 @@ def train(params):
     envs = make_vec_envs(params['num_processes'], device)
     env_eval = CarlaEnv(eval=True)
 
-    activation = None
-    if params['use_activation']:
-        activation = torch.tanh
-
     # network
     actor_critic = Policy(
         envs.observation_space.shape,
         envs.metrics_space,
         envs.action_space,
-        activation=activation)
+        params['use_activation'],
+        params['logstd'],
+        params['var_ent'])
     actor_critic.to(device)
 
     # learn_bc(actor_critic, envs, device, gail_train_loader)
@@ -171,6 +173,7 @@ def train(params):
         device,
         lr=params['lr'],
         eps=params['eps'],
+        betas=params['betas'],
         gamma=params['gailgamma'],
         decay=params['decay'],
         act_space=envs.action_space,
@@ -185,7 +188,7 @@ def train(params):
         device,
         params['gail_lr'],
         params['gail_eps'],
-        params['gail_beta1'],
+        params['gail_betas'],
         params['gail_max_grad_norm'])
 
     model = gailLearning_mujoco_origin(run_params=run_params,

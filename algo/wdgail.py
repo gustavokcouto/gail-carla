@@ -13,7 +13,7 @@ from tools.model import Flatten
 
 
 class Discriminator(nn.Module):
-    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, beta1, max_grad_norm=None):
+    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None):
         super(Discriminator, self).__init__()
         self.device = device
         C, H, W = state_shape
@@ -45,7 +45,7 @@ class Discriminator(nn.Module):
         self.trunk.train()
 
         self.max_grad_norm = max_grad_norm
-        self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()), lr=lr, betas=(beta1, 0.9), eps=eps)
+        self.optimizer = torch.optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()), lr=lr, betas=betas, eps=eps)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
 

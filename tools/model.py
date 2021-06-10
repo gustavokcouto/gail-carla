@@ -10,11 +10,11 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, metrics_space, action_space, activation=None):
+    def __init__(self, obs_shape, metrics_space, action_space, activation, logstd, var_ent):
         super(Policy, self).__init__()
 
         num_outputs = action_space.shape[0]
-        self.base = CNNBase(obs_shape, metrics_space, num_outputs)
+        self.base = CNNBase(obs_shape, metrics_space, num_outputs, activation, logstd, var_ent)
 
         self.max = torch.Tensor([1, 1])
         self.min = torch.Tensor([-1, 0])
@@ -51,7 +51,7 @@ class Policy(nn.Module):
 
 
 class CNNBase(nn.Module):
-    def __init__(self, obs_shape, metrics_space, num_outputs, hidden_size=512):
+    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, var_ent, hidden_size=512):
         super(CNNBase, self).__init__()
 
         C, H, W = obs_shape
@@ -82,12 +82,12 @@ class CNNBase(nn.Module):
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
         self.output_linear = init_(nn.Linear(hidden_size, num_outputs))
-        # self.logstd = nn.Parameter(torch.Tensor([[0.0, 0.0]]))
-        self.logstd0 = torch.Tensor([[-0.6, -0.2]])
-        self.logstd1 = torch.Tensor([[-1.4, -1.0]])
-        self.logstd2 = torch.Tensor([[-2.0, -1.8]])
-        self.logstd3 = torch.Tensor([[-2.8, -3.0]])
+        if var_ent:
+            self.logstd = nn.Parameter(torch.Tensor([logstd]))
+        else:
+            self.logstd = torch.Tensor([logstd])
 
+        self.activation = activation
         self.train()
 
     def set_epoch(self, epoch):
@@ -98,10 +98,11 @@ class CNNBase(nn.Module):
         x = self.trunk(torch.cat([x, metrics], dim=1))
         critic = self.critic_linear(x)
         output = self.output_linear(x)
-        # output[...,0] = torch.tanh(output[...,0])
-        # output[...,1] = torch.sigmoid(output[...,1])
+        if self.activation:
+            output[...,0] = torch.tanh(output[...,0])
+            output[...,1] = torch.sigmoid(output[...,1])
         zeros = torch.zeros(output.size()).to(output)
-        logstd = self.logstd2.to(output)
+        logstd = self.logstd.to(output)
         logstd = logstd + zeros
         return critic, output, logstd
 
