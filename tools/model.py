@@ -98,8 +98,8 @@ class CNNBase(nn.Module):
         x = self.trunk(torch.cat([x, metrics], dim=1))
         critic = self.critic_linear(x)
         output = self.output_linear(x)
-        output[...,0] = torch.tanh(output[...,0])
-        output[...,1] = torch.sigmoid(output[...,1])
+        # output[...,0] = torch.tanh(output[...,0])
+        # output[...,1] = torch.sigmoid(output[...,1])
         zeros = torch.zeros(output.size()).to(output)
         logstd = self.logstd2.to(output)
         logstd = logstd + zeros

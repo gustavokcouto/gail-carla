@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.autograd import Variable
 
 
 class PPO():
@@ -83,8 +84,7 @@ class PPO():
                         exp_metrics = Variable(exp_metrics).to(action_loss.device)
                         exp_action = Variable(exp_action).to(action_loss.device)
                         # Get BC loss
-                        _exp_action = exp_action
-                        _, alogprobs, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, None, _exp_action)
+                        _, alogprobs, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, exp_action)
                         bcloss = -alogprobs.mean()
 
                         bc_loss_epoch += bcloss.item()

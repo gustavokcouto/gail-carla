@@ -161,11 +161,11 @@ class IMU(object):
 class CarlaEnv(gym.Env):
     def __init__(self, env_id=0, train=True, eval=False):
         super(CarlaEnv, self).__init__()
-        if env_id < 3:
+        if env_id < 5:
             port = 2000 + 2 * env_id
             host = '192.168.0.4'
         else:
-            port = 2000 + 2 * (env_id - 3)
+            port = 2000 + 2 * (env_id - 5)
             host = '192.168.0.5'
         if eval:
             port = 2000
@@ -327,7 +327,7 @@ class CarlaEnv(gym.Env):
         self.collision = False
         self.route_completed = False
         self.episode_reward = 0
-        self.last_route_metrics = 0
+        self.last_route_metrics = self._waypoint_planner.route_completion()
 
         obs, metrics, _, _, _ = self.step(None)
 

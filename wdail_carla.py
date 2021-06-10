@@ -35,7 +35,7 @@ def read_params():
 
         # ppo
         # num_processes
-        'num_processes': 8,
+        'num_processes': 10,
         # num-steps
         'num_steps': 800,
         # learning rate
