@@ -63,7 +63,19 @@ def read_params():
         # max norm of gradients (default: 0.5)
         'max_grad_norm': 0.5,
         # Model log std deviation
-        'logstd': [-0.6, -0.2],
+        'std_dev': [
+            {
+                'logstd': [-0.6, -0.2],
+                'limit': 100
+            },
+            {
+                'logstd': [-1.4, -1.0],
+                'limit': 200
+            },
+            {
+                'logstd': [-2.0, -1.8]
+            }
+        ],
 
         # gail
         # directory that contains expert demonstrations for gail
@@ -157,7 +169,7 @@ def train(params):
         envs.metrics_space,
         envs.action_space,
         params['use_activation'],
-        params['logstd'],
+        params['std_dev'],
         params['var_ent'])
     actor_critic.to(device)
 

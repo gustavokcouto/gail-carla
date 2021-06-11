@@ -10,11 +10,11 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, metrics_space, action_space, activation, logstd, var_ent):
+    def __init__(self, obs_shape, metrics_space, action_space, activation, std_dev, var_ent):
         super(Policy, self).__init__()
 
         num_outputs = action_space.shape[0]
-        self.base = CNNBase(obs_shape, metrics_space, num_outputs, activation, logstd, var_ent)
+        self.base = CNNBase(obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent)
 
         self.max = torch.Tensor([1, 1])
         self.min = torch.Tensor([-1, 0])
@@ -51,7 +51,7 @@ class Policy(nn.Module):
 
 
 class CNNBase(nn.Module):
-    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, var_ent, hidden_size=512):
+    def __init__(self, obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent, hidden_size=512):
         super(CNNBase, self).__init__()
 
         C, H, W = obs_shape
@@ -82,16 +82,22 @@ class CNNBase(nn.Module):
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
         self.output_linear = init_(nn.Linear(hidden_size, num_outputs))
+        self.std_dev = std_dev
+        self.var_ent = var_ent
         if var_ent:
-            self.logstd = nn.Parameter(torch.Tensor([logstd]))
-        else:
-            self.logstd = torch.Tensor([logstd])
+            self.logstd = nn.Parameter(torch.Tensor([std_dev[0]['logstd']]))
 
         self.activation = activation
         self.train()
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+        if not self.var_ent:
+            for std_dev in self.std_dev:
+                if 'limit' in std_dev and self.epoch > std_dev['limit']:
+                    continue
+                self.logstd = torch.Tensor(std_dev['logstd'])
+                break
 
     def forward(self, obs, metrics):
         x = self.main(obs)
