@@ -91,13 +91,13 @@ def read_params():
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 25,
+        'gail_pre_epoch': 15,
         # number of steps to train discriminator in each epoch
-        'gail_epoch': 5,
+        'gail_epoch': 3,
         # max norm of gradients (default: 0.5)
         'gail_max_grad_norm': 0.5,
         # num trajs
-        'num_trajs': 3,
+        'num_trajs': 10,
         # trajectories subsample frequency
         'subsample_frequency': 1,
         # log interval, one log per n updates (default: 10)
@@ -106,9 +106,9 @@ def read_params():
         'eval_interval': 3,
 
         # bcgail
-        'bcgail': 0,
+        'bcgail': 1,
         'decay': 0.99,
-        'gailgamma': 0.125,
+        'gailgamma': 0.0,
         # Use final activation? (Useful for certain scenarios)
         'use_activation': True
     }
