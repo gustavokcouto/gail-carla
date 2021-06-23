@@ -60,10 +60,16 @@ class CNNBase(nn.Module):
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
         self.main = nn.Sequential(
-            init_(nn.Conv2d(C, 32, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(64, 128, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(128, 256, 4, stride=2)), nn.ReLU(), Flatten())
+            init_(nn.Conv2d(C, 32, 4, stride=2)),
+            nn.LeakyReLU(0.2),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.LeakyReLU(0.2),
+            init_(nn.Conv2d(64, 128, 4, stride=2)),
+            nn.LeakyReLU(0.2),
+            init_(nn.Conv2d(128, 256, 4, stride=2)),
+            nn.LeakyReLU(0.2),
+            Flatten()
+        )
 
         for i in range(4):
             H = (H - 4)//2 + 1
