@@ -13,7 +13,17 @@ def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
 
 
-def gailLearning_mujoco_origin(run_params, envs, env_eval, actor_critic, agent, discriminator, gail_train_loader, device, utli):
+def gailLearning_mujoco_origin(run_params,
+                               envs,
+                               env_eval,
+                               actor_critic,
+                               agent,
+                               discriminator,
+                               gail_train_loader,
+                               gail_val_loader,
+                               device,
+                               utli
+                               ):
 
     log_save_name = utli.Log_save_name4gail(run_params)
     log_save_path = os.path.join("./runs", log_save_name)
@@ -110,11 +120,12 @@ def gailLearning_mujoco_origin(run_params, envs, env_eval, actor_critic, agent, 
 
         # gail
         disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
-            gail_train_loader, rollouts)
+            gail_val_loader, rollouts)
         gail_epoch = run_params['gail_epoch']
         if i_update < run_params['gail_thre']:
             gail_epoch += (run_params['gail_pre_epoch'] - run_params['gail_epoch']) * \
-                (run_params['gail_thre'] - (i_update - 1)) / run_params['gail_thre']  # Warm up
+                (run_params['gail_thre'] - (i_update - 1)) / \
+                run_params['gail_thre']  # Warm up
             gail_epoch = int(gail_epoch)
         dis_total_losses = []
         policy_rewards = []
@@ -124,7 +135,15 @@ def gailLearning_mujoco_origin(run_params, envs, env_eval, actor_critic, agent, 
         expert_losses = []
         policy_losses = []
         for _ in range(gail_epoch):
-            dis_total_loss, policy_mean_reward, expert_reward_mean, dis_loss, dis_gp, expert_loss, policy_loss = discriminator.update(
+            (
+                dis_total_loss,
+                policy_mean_reward,
+                expert_reward_mean,
+                dis_loss,
+                dis_gp,
+                expert_loss,
+                policy_loss
+            ) = discriminator.update(
                 gail_train_loader, rollouts)
             dis_total_losses.append(dis_total_loss)
             policy_rewards.append(policy_mean_reward)
@@ -162,7 +181,8 @@ def gailLearning_mujoco_origin(run_params, envs, env_eval, actor_critic, agent, 
                     cum_gailrewards[i_env] = .0
 
         # compute returns
-        rollouts.compute_returns(next_value, run_params['gamma'], run_params['gae_lambda'])
+        rollouts.compute_returns(
+            next_value, run_params['gamma'], run_params['gae_lambda'])
 
         # training PPO policy
         if run_params['bcgail']:

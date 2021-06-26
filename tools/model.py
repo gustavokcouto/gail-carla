@@ -56,17 +56,14 @@ class CNNBase(nn.Module):
 
         C, H, W = obs_shape
 
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
-
         self.main = nn.Sequential(
-            init_(nn.Conv2d(C, 32, 4, stride=2)),
+            nn.Conv2d(C, 32, 4, stride=2),
             nn.LeakyReLU(0.2),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.Conv2d(32, 64, 4, stride=2),
             nn.LeakyReLU(0.2),
-            init_(nn.Conv2d(64, 128, 4, stride=2)),
+            nn.Conv2d(64, 128, 4, stride=2),
             nn.LeakyReLU(0.2),
-            init_(nn.Conv2d(128, 256, 4, stride=2)),
+            nn.Conv2d(128, 256, 4, stride=2),
             nn.LeakyReLU(0.2),
             Flatten()
         )
@@ -79,15 +76,11 @@ class CNNBase(nn.Module):
 
 
         self.trunk = nn.Sequential(
-            init_(nn.Linear(metrics_space.shape[0] + img_dim, hidden_size)), nn.ReLU(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.ReLU(),
+            nn.Linear(metrics_space.shape[0] + img_dim, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, 1 + num_outputs)
         )
 
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0))
-
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
-        self.output_linear = init_(nn.Linear(hidden_size, num_outputs))
         self.std_dev = std_dev
         self.var_ent = var_ent
         if var_ent:
@@ -107,9 +100,9 @@ class CNNBase(nn.Module):
 
     def forward(self, obs, metrics):
         x = self.main(obs)
-        x = self.trunk(torch.cat([x, metrics], dim=1))
-        critic = self.critic_linear(x)
-        output = self.output_linear(x)
+        nn_output = self.trunk(torch.cat([x, metrics], dim=1))
+        critic = nn_output[...,0].unsqueeze(dim=1)
+        output = nn_output[...,1:]
         if self.activation:
             output[...,0] = torch.tanh(output[...,0])
             output[...,1] = torch.sigmoid(output[...,1])

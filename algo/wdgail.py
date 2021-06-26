@@ -19,14 +19,18 @@ class Discriminator(nn.Module):
         C, H, W = state_shape
 
         self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2),
+            nn.Conv2d(C, 32, 4, stride=2, bias=False),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 64, 4, stride=2),
+            nn.Dropout(0.5),
+            nn.Conv2d(32, 64, 4, stride=2, bias=False),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 4, stride=2),
+            nn.Dropout(0.5),
+            nn.Conv2d(64, 128, 4, stride=2, bias=False),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 4, stride=2),
+            nn.Dropout(0.5),
+            nn.Conv2d(128, 256, 4, stride=2, bias=False),
             nn.LeakyReLU(0.2),
+            nn.Dropout(0.5),
             Flatten(),
         ).to(device)
 
@@ -37,8 +41,9 @@ class Discriminator(nn.Module):
         img_dim = 256*H*W
 
         self.trunk = nn.Sequential(
-            nn.Linear(img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim), nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, hidden_dim), nn.LeakyReLU(0.2),
+            nn.Linear(img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.5),
             nn.Linear(hidden_dim, 1)).to(device)
 
         self.main.train()
@@ -216,11 +221,12 @@ class Discriminator(nn.Module):
 
 
 class ExpertDataset(torch.utils.data.Dataset):
-    def __init__(self, file_name, num_trajectories=4, subsample_frequency=20):
+    def __init__(self, file_name, num_trajectories=4, subsample_frequency=20, start=0):
         all_trajectories = torch.load(file_name)
 
         perm = torch.randperm(all_trajectories['states'].size(0))
-        idx = perm[:num_trajectories]
+        # idx = perm[:num_trajectories]
+        idx = np.arange(num_trajectories) + start
 
         self.trajectories = {}
 

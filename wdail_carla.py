@@ -49,7 +49,7 @@ def read_params():
         # ADAM optimizer epsilon (default: 1e-5)
         'eps': 1e-5,
         # ADAM Optimizer betas param
-        'betas': [0.9, 0.99],
+        'betas': [0.5, 0.99],
         # discount factor for rewards (default: 0.99)
         'gamma': 0.99,
         # gae lambda parameter (default: 0.95)
@@ -65,15 +65,7 @@ def read_params():
         # Model log std deviation
         'std_dev': [
             {
-                'logstd': [-0.6, -0.2],
-                'limit': 100
-            },
-            {
-                'logstd': [-1.4, -1.0],
-                'limit': 200
-            },
-            {
-                'logstd': [-2.0, -1.8]
+                'logstd': [-1.4, -1.0]
             }
         ],
 
@@ -98,6 +90,8 @@ def read_params():
         'gail_max_grad_norm': 0.5,
         # num trajs
         'num_trajs': 10,
+        # num validation trajs
+        'num_val_trajs': 2,
         # trajectories subsample frequency
         'subsample_frequency': 1,
         # log interval, one log per n updates (default: 10)
@@ -155,7 +149,21 @@ def train(params):
 
     gail_train_loader = torch.utils.data.DataLoader(
         ExpertDataset(
-            file_name, num_trajectories=params['num_trajs'], subsample_frequency=params['subsample_frequency']),
+            file_name,
+            num_trajectories=params['num_trajs'],
+            subsample_frequency=params['subsample_frequency']
+        ),
+        batch_size=params['gail_batch_size'],
+        shuffle=True,
+        drop_last=True)
+
+    gail_val_loader = torch.utils.data.DataLoader(
+        ExpertDataset(
+            file_name,
+            num_trajectories=params['num_val_trajs'],
+            subsample_frequency=params['subsample_frequency'],
+            start=params['num_trajs']
+        ),
         batch_size=params['gail_batch_size'],
         shuffle=True,
         drop_last=True)
@@ -210,6 +218,7 @@ def train(params):
                                        agent=agent,
                                        discriminator=discr,
                                        gail_train_loader=gail_train_loader,
+                                       gail_val_loader=gail_val_loader,
                                        device=device,
                                        utli=utli)
 
