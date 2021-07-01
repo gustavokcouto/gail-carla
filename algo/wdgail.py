@@ -10,7 +10,8 @@ from torch import autograd
 from common.running_mean_std import RunningMeanStd
 from tools.utils import init
 from tools.model import Flatten
-from tools.radam import RAdam
+import torch.optim as optim
+
 
 class Discriminator(nn.Module):
     def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None):
@@ -50,7 +51,7 @@ class Discriminator(nn.Module):
         self.trunk.train()
 
         self.max_grad_norm = max_grad_norm
-        self.optimizer = RAdam(list(self.main.parameters()) + list(self.trunk.parameters()), lr=lr, betas=betas, eps=eps)
+        self.optimizer = optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()), lr=lr, betas=betas, eps=eps)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
 

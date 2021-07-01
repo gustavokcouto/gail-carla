@@ -47,9 +47,9 @@ def read_params():
         # ppo clip parameter (default: 0.2)
         'clip_param': 0.1,
         # ADAM optimizer epsilon (default: 1e-5)
-        'eps': 1e-5,
+        'eps': 1e-8,
         # ADAM Optimizer betas param
-        'betas': [0.5, 0.99],
+        'betas': [0.9, 0.99],
         # discount factor for rewards (default: 0.99)
         'gamma': 0.99,
         # gae lambda parameter (default: 0.95)
