@@ -37,7 +37,7 @@ def read_params():
         # num_processes
         'num_processes': 10,
         # num-steps
-        'num_steps': 2400,
+        'num_steps': 4000,
         # learning rate
         'lr': 2.5e-4,
         # ppo epoch num
@@ -65,7 +65,7 @@ def read_params():
         # Model log std deviation
         'std_dev': [
             {
-                'logstd': [-1.4, -1.0]
+                'logstd': [-1.0, -2.8]
             }
         ],
 
