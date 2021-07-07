@@ -42,16 +42,21 @@ class Discriminator(nn.Module):
         img_dim = 256*H*W
 
         self.trunk = nn.Sequential(
-            nn.Linear(img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
+            nn.Linear(
+                img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
             nn.LeakyReLU(0.2),
-            nn.Dropout(0.5),
-            nn.Linear(hidden_dim, 1)).to(device)
+            nn.Dropout(0.5)).to(device)
+        self.last_layer = nn.Sequential(nn.Linear(hidden_dim, 1)).to(device)
 
         self.main.train()
         self.trunk.train()
+        self.last_layer.train()
 
         self.max_grad_norm = max_grad_norm
-        self.optimizer = optim.Adam(list(self.main.parameters()) + list(self.trunk.parameters()), lr=lr, betas=betas, eps=eps)
+        self.optimizer = optim.Adam(list(self.main.parameters())
+                                    + list(self.trunk.parameters())
+                                    + list(self.last_layer.parameters()),
+                                    lr=lr, betas=betas, eps=eps)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
 
@@ -68,23 +73,29 @@ class Discriminator(nn.Module):
         alpha = torch.rand(expert_state.size(0), 1, 1, 1)
 
         alpha_state = alpha.expand_as(expert_state).to(expert_state.device)
-        mixup_state = alpha_state * expert_state + (1 - alpha_state) * policy_state
+        mixup_state = alpha_state * expert_state + \
+            (1 - alpha_state) * policy_state
         mixup_state.requires_grad = True
 
         alpha = alpha.view(expert_state.size(0), 1)
-        alpha_metrics = alpha.expand_as(expert_metrics).to(expert_metrics.device)
-        mixup_metrics = alpha_metrics * expert_metrics + (1 - alpha_metrics) * policy_metrics
+        alpha_metrics = alpha.expand_as(
+            expert_metrics).to(expert_metrics.device)
+        mixup_metrics = alpha_metrics * expert_metrics + \
+            (1 - alpha_metrics) * policy_metrics
         mixup_metrics.requires_grad = True
 
         alpha_action = alpha.expand_as(expert_action).to(expert_action.device)
-        mixup_action = alpha_action * expert_action + (1 - alpha_action) * policy_action
+        mixup_action = alpha_action * expert_action + \
+            (1 - alpha_action) * policy_action
         mixup_action.requires_grad = True
 
         mixup_state_features = self.main(mixup_state)
 
-        mixup_data = torch.cat([mixup_state_features, mixup_metrics, mixup_action], dim=1)
+        mixup_data = torch.cat(
+            [mixup_state_features, mixup_metrics, mixup_action], dim=1)
 
-        disc = self.trunk(mixup_data)
+        disc_t = self.trunk(mixup_data)
+        disc = self.last_layer(disc_t)
         ones = torch.ones(disc.size()).to(disc.device)
 
         grad = autograd.grad(
@@ -94,13 +105,33 @@ class Discriminator(nn.Module):
             create_graph=True,
             retain_graph=True,
             only_inputs=True)[0]
-        
+
         # Gradients have shape (batch_size, num_channels, img_width, img_height),
         # so flatten to easily take norm per example in batch
         grad = grad.view(grad.size(0), -1)
 
         grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
+
+    def compute_consistency_term(self,
+                                 expert_state,
+                                 expert_metrics,
+                                 expert_action,
+                                 m_tag=0,
+                                 lambda_=2):
+        exp_state = self.main(expert_state)
+        disc_t1 = self.trunk(
+            torch.cat([exp_state, expert_metrics, expert_action], dim=1))
+        disc1 = self.last_layer(disc_t1)
+
+        exp_state = self.main(expert_state)
+        disc_t2 = self.trunk(
+            torch.cat([exp_state, expert_metrics, expert_action], dim=1))
+        disc2 = self.last_layer(disc_t2)
+
+        consistency_term = (disc1 - disc2).norm(2, dim=1) + 0.1 * \
+            (disc_t1 - disc_t2).norm(2, dim=1) - m_tag
+        return lambda_ * consistency_term.mean()
 
     def update(self, expert_loader, rollouts):
         self.train()
@@ -111,18 +142,21 @@ class Discriminator(nn.Module):
         loss = 0
         expert_ac_loss = 0
         policy_ac_loss = 0
-        g_loss =0.0
-        gp =0.0
+        g_loss = 0.0
+        gp = 0.0
+        ct = 0.0
         n = 0
         policy_reward = 0
         expert_reward = 0
         for expert_batch, policy_batch in zip(expert_loader,
                                               policy_data_generator):
-            policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[2]
+            policy_state, policy_metrics, policy_action = policy_batch[
+                0], policy_batch[1], policy_batch[2]
 
             pol_state = self.main(policy_state)
-            policy_d = self.trunk(
+            policy_dt = self.trunk(
                 torch.cat([pol_state, policy_metrics, policy_action], dim=1))
+            policy_d = self.last_layer(policy_dt)
             policy_reward += policy_d.sum().item()
 
             expert_state, expert_metrics, expert_action = expert_batch
@@ -131,8 +165,9 @@ class Discriminator(nn.Module):
             expert_metrics = expert_metrics.to(self.device)
             expert_action = expert_action.to(self.device)
             exp_state = self.main(expert_state)
-            expert_d = self.trunk(
+            expert_dt = self.trunk(
                 torch.cat([exp_state, expert_metrics, expert_action], dim=1))
+            expert_d = self.last_layer(expert_dt)
             expert_reward += expert_d.sum().item()
 
             # expert_loss = F.binary_cross_entropy_with_logits(
@@ -151,21 +186,27 @@ class Discriminator(nn.Module):
             wd = expert_loss - policy_loss
             grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
                                              policy_state, policy_metrics, policy_action)
+            cons_term = self.compute_consistency_term(expert_state, expert_metrics, expert_action)
 
             # loss += (gail_loss + grad_pen).item()
-            loss += (-wd + grad_pen).item() * n_samples
+            loss += (-wd + grad_pen + cons_term).item() * n_samples
             g_loss += (wd).item() * n_samples
             gp += (grad_pen).item() * n_samples
+            ct += (cons_term).item() * n_samples
             n += n_samples
 
             self.optimizer.zero_grad()
             # (gail_loss + grad_pen).backward()
-            (-wd + grad_pen).backward()
-            nn.utils.clip_grad_norm_(self.main.parameters(), self.max_grad_norm)
-            nn.utils.clip_grad_norm_(self.trunk.parameters(), self.max_grad_norm)
+            (-wd + grad_pen + cons_term).backward()
+            nn.utils.clip_grad_norm_(
+                self.main.parameters(), self.max_grad_norm)
+            nn.utils.clip_grad_norm_(
+                self.trunk.parameters(), self.max_grad_norm)
+            nn.utils.clip_grad_norm_(
+                self.last_layer.parameters(), self.max_grad_norm)
             self.optimizer.step()
 
-        return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, expert_ac_loss / n, policy_ac_loss / n
+        return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, ct/n, expert_ac_loss / n, policy_ac_loss / n
 
     def compute_loss(self, expert_loader, rollouts):
         with torch.no_grad():
@@ -177,20 +218,23 @@ class Discriminator(nn.Module):
 
             n = 0
             for expert_batch, policy_batch in zip(expert_loader,
-                                                policy_data_generator):
-                policy_state, policy_metrics, policy_action = policy_batch[0], policy_batch[1], policy_batch[2]
+                                                  policy_data_generator):
+                policy_state, policy_metrics, policy_action = policy_batch[
+                    0], policy_batch[1], policy_batch[2]
 
                 pol_state = self.main(policy_state)
-                policy_d = self.trunk(
+                policy_dt = self.trunk(
                     torch.cat([pol_state, policy_metrics, policy_action], dim=1))
+                policy_d = self.last_layer(policy_dt)
 
                 expert_state, expert_metrics, expert_action = expert_batch
                 expert_state = expert_state.to(self.device)
                 expert_metrics = expert_metrics.to(self.device)
                 expert_action = expert_action.to(self.device)
                 exp_state = self.main(expert_state)
-                expert_d = self.trunk(
+                expert_dt = self.trunk(
                     torch.cat([exp_state, expert_metrics, expert_action], dim=1))
+                expert_d = self.last_layer(expert_dt)
                 expert_loss = torch.tanh(expert_d)
                 policy_loss = torch.tanh(policy_d)
                 expert_reward += expert_loss.sum().item()
@@ -207,7 +251,8 @@ class Discriminator(nn.Module):
             acts = action
 
             stat = self.main(state)
-            d = self.trunk(torch.cat([stat, metrics, acts], dim=1))
+            dt = self.trunk(torch.cat([stat, metrics, acts], dim=1))
+            d = self.last_layer(dt)
             s = torch.sigmoid(d)
             reward = -(1 - s).log()
 
@@ -233,7 +278,8 @@ class ExpertDataset(torch.utils.data.Dataset):
 
         # See https://github.com/pytorch/pytorch/issues/14886
         # .long() for fixing bug in torch v0.4.1
-        start_idx = torch.randint(0, subsample_frequency, size=(num_trajectories,)).long()
+        start_idx = torch.randint(
+            0, subsample_frequency, size=(num_trajectories,)).long()
 
         for k, v in all_trajectories.items():
             data = v[idx]
