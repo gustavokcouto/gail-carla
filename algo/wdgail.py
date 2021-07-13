@@ -14,7 +14,7 @@ import torch.optim as optim
 
 
 class Discriminator(nn.Module):
-    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None):
+    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, ct_lambda, max_grad_norm=None):
         super(Discriminator, self).__init__()
         self.device = device
         C, H, W = state_shape
@@ -59,6 +59,7 @@ class Discriminator(nn.Module):
                                     lr=lr, betas=betas, eps=eps)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
+        self.ct_lambda = ct_lambda
 
     def compute_grad_pen(self,
                          expert_state,
@@ -117,8 +118,7 @@ class Discriminator(nn.Module):
                                  expert_state,
                                  expert_metrics,
                                  expert_action,
-                                 m_tag=0,
-                                 lambda_=2):
+                                 m_tag=0):
         exp_state = self.main(expert_state)
         disc_t1 = self.trunk(
             torch.cat([exp_state, expert_metrics, expert_action], dim=1))
@@ -131,7 +131,7 @@ class Discriminator(nn.Module):
 
         consistency_term = (disc1 - disc2).norm(2, dim=1) + 0.1 * \
             (disc_t1 - disc_t2).norm(2, dim=1) - m_tag
-        return lambda_ * consistency_term.mean()
+        return consistency_term.mean()
 
     def update(self, expert_loader, rollouts):
         self.train()
@@ -152,6 +152,9 @@ class Discriminator(nn.Module):
                                               policy_data_generator):
             policy_state, policy_metrics, policy_action = policy_batch[
                 0], policy_batch[1], policy_batch[2]
+            policy_state = policy_state.to(self.device)
+            policy_metrics = policy_metrics.to(self.device)
+            policy_action = policy_action.to(self.device)
 
             pol_state = self.main(policy_state)
             policy_dt = self.trunk(
@@ -189,7 +192,7 @@ class Discriminator(nn.Module):
             cons_term = self.compute_consistency_term(expert_state, expert_metrics, expert_action)
 
             # loss += (gail_loss + grad_pen).item()
-            loss += (-wd + grad_pen + cons_term).item() * n_samples
+            loss += (-wd + grad_pen + self.ct_lambda * cons_term).item() * n_samples
             g_loss += (wd).item() * n_samples
             gp += (grad_pen).item() * n_samples
             ct += (cons_term).item() * n_samples
@@ -197,7 +200,7 @@ class Discriminator(nn.Module):
 
             self.optimizer.zero_grad()
             # (gail_loss + grad_pen).backward()
-            (-wd + grad_pen + cons_term).backward()
+            (-wd + grad_pen + self.ct_lambda * cons_term).backward()
             nn.utils.clip_grad_norm_(
                 self.main.parameters(), self.max_grad_norm)
             nn.utils.clip_grad_norm_(
@@ -221,6 +224,9 @@ class Discriminator(nn.Module):
                                                   policy_data_generator):
                 policy_state, policy_metrics, policy_action = policy_batch[
                     0], policy_batch[1], policy_batch[2]
+                policy_state = policy_state.to(self.device)
+                policy_metrics = policy_metrics.to(self.device)
+                policy_action = policy_action.to(self.device)
 
                 pol_state = self.main(policy_state)
                 policy_dt = self.trunk(
@@ -248,13 +254,13 @@ class Discriminator(nn.Module):
     def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
         with torch.no_grad():
             self.eval()
-            acts = action
 
             stat = self.main(state)
-            dt = self.trunk(torch.cat([stat, metrics, acts], dim=1))
+            dt = self.trunk(torch.cat([stat, metrics, action], dim=1))
             d = self.last_layer(dt)
             s = torch.sigmoid(d)
             reward = -(1 - s).log()
+            reward = reward.cpu()
 
             if self.returns is None:
                 self.returns = reward.clone()

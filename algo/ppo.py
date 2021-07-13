@@ -64,8 +64,15 @@ class PPO():
 
             for sample in data_generator:
                 obs_batch, metrics_batch, actions_batch, \
-                   value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
+                   value_preds_batch, return_batch, _, old_action_log_probs_batch, \
                         adv_targ = sample
+                obs_batch = obs_batch.to(self.device)
+                metrics_batch = metrics_batch.to(self.device)
+                actions_batch = actions_batch.to(self.device)
+                value_preds_batch = value_preds_batch.to(self.device)
+                return_batch = return_batch.to(self.device)
+                old_action_log_probs_batch = old_action_log_probs_batch.to(self.device)
+                adv_targ = adv_targ.to(self.device)
 
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, steer_std, throttle_std = self.actor_critic.evaluate_actions(

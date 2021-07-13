@@ -37,7 +37,7 @@ def read_params():
         # num_processes
         'num_processes': 10,
         # num-steps
-        'num_steps': 3600,
+        'num_steps': 7200,
         # learning rate
         'lr': 2.5e-4,
         # ppo epoch num
@@ -80,12 +80,14 @@ def read_params():
         'gail_eps': 1e-8,
         # GAIL Optimizer betas param
         'gail_betas': [0.9, 0.99],
+        # GAIL consistency term lambda
+        'gail_ct_lambda': 0,
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 15,
+        'gail_pre_epoch': 10,
         # number of steps to train discriminator in each epoch
-        'gail_epoch': 3,
+        'gail_epoch': 2,
         # max norm of gradients (default: 0.5)
         'gail_max_grad_norm': 0.5,
         # num trajs
@@ -209,7 +211,9 @@ def train(params):
         params['gail_lr'],
         params['gail_eps'],
         params['gail_betas'],
-        params['gail_max_grad_norm'])
+        params['gail_ct_lambda'],
+        params['gail_max_grad_norm'],
+    )
 
     model = gailLearning_mujoco_origin(run_params=run_params,
                                        envs=envs,

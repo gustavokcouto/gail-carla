@@ -69,7 +69,6 @@ def gailLearning_mujoco_origin(run_params,
     obs, metrics = envs.reset()
     rollouts.obs[0].copy_(obs)
     rollouts.metrics[0].copy_(metrics)
-    rollouts.to(device)
 
     start = time.time()
 
@@ -96,7 +95,7 @@ def gailLearning_mujoco_origin(run_params,
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob = actor_critic.act(
-                    rollouts.obs[step], rollouts.metrics[step])
+                    rollouts.obs[step].to(device), rollouts.metrics[step].to(device))
 
             obs, metrics, rewards, done, infos = envs.step(action)
 
@@ -110,13 +109,13 @@ def gailLearning_mujoco_origin(run_params,
             masks = torch.FloatTensor(
                 [[0.0] if done_ else [1.0] for done_ in done])
 
-            rollouts.insert(obs, metrics, action,
+            rollouts.insert(obs.cpu(), metrics.cpu(), action.cpu(),
                             action_log_prob, value, rewards, masks)
 
         print('finished sim')
         with torch.no_grad():
             next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.metrics[-1]).detach()
+                rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
 
         # gail
         disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
@@ -171,9 +170,9 @@ def gailLearning_mujoco_origin(run_params,
 
         for step in range(nbatch):
             rollouts.gail_rewards[step] = discriminator.predict_reward(
-                rollouts.obs[step],
-                rollouts.metrics[step],
-                rollouts.actions[step],
+                rollouts.obs[step].to(device),
+                rollouts.metrics[step].to(device),
+                rollouts.actions[step].to(device),
                 run_params['gamma'],
                 rollouts.masks[step])
 

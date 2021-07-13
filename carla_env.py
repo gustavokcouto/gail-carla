@@ -265,10 +265,17 @@ class CarlaEnv(gym.Env):
         self._sensors['imu'] = IMU(self._world, self._player)
 
     def get_start_position(self):
+        random_restart = not (self._command_planner.route_completed() or \
+            len(self._command_planner.route) == 0) and \
+            self.train and not self.eval and \
+            (np.random.randint(10) == 0)
+        if random_restart:
+            print('random_restart')
         if (self._command_planner.route_completed()
             or len(self._command_planner.route) == 0
-            or self.eval):
-            if not self._player:
+            or self.eval
+            or random_restart):
+            if not self._player or random_restart:
                 route_file = Path('data/route_00.xml')
                 trajectory = parse_routes_file(route_file)
                 self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(
@@ -294,7 +301,7 @@ class CarlaEnv(gym.Env):
             self._command_planner.set_route(
                 global_plan_gps, global_plan_world_coord)
 
-        if self._player:
+        if self._player and not random_restart:
             transform = self._player.get_transform()
             start_pose = self._waypoint_planner.route[0][2]
             start_pose.location.z = transform.location.z
