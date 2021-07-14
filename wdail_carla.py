@@ -65,7 +65,11 @@ def read_params():
         # Model log std deviation
         'std_dev': [
             {
-                'logstd': [-1.0, -2.8]
+                'logstd': [-1.0, -2.8],
+                'limit': 100
+            },
+            {
+                'logstd': [-2.0, -2.8]
             }
         ],
 

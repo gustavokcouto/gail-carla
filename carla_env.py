@@ -199,6 +199,9 @@ class CarlaEnv(gym.Env):
         self.metrics_space = spaces.Box(low=-100, high=100,
                                         shape=(3 + len(self.road_options),), dtype=np.float32)
 
+        route_file = Path('data/route_00.xml')
+        self.trajectory = parse_routes_file(route_file)
+
         self._waypoint_planner = RoutePlanner(1e-5, 5e-4)
         self._command_planner = RoutePlanner(1e-4, 2.5e-4, 258)
 
@@ -265,47 +268,46 @@ class CarlaEnv(gym.Env):
         self._sensors['imu'] = IMU(self._world, self._player)
 
     def get_start_position(self):
-        random_restart = not (self._command_planner.route_completed() or \
-            len(self._command_planner.route) == 0) and \
-            self.train and not self.eval and \
-            (np.random.randint(10) == 0)
-        if random_restart:
-            print('random_restart')
-        if (self._command_planner.route_completed()
-            or len(self._command_planner.route) == 0
-            or self.eval
-            or random_restart):
-            if not self._player or random_restart:
-                route_file = Path('data/route_00.xml')
-                trajectory = parse_routes_file(route_file)
-                self.global_plan_gps, self.global_plan_world_coord = interpolate_trajectory(
-                    self._world, trajectory)
-                start = 0
-                if self.train and not self.eval:
-                    start = np.random.randint(len(trajectory) - 2)
-                global_plan_gps, global_plan_world_coord = interpolate_trajectory(
-                    self._world, trajectory[start:])
+        route_completed = (self._command_planner.route_completed() or
+                           len(self._command_planner.route) == 0)
+        training = self.train and not self.eval
+        random_start = training and (
+            not self._player or (
+                not route_completed and
+                np.random.randint(10) == 0
+            )
+        )
 
-                start_pose = global_plan_world_coord[0][0]
-                start_pose.location.z += 0.5
-            
-            else:
-                global_plan_gps = self.global_plan_gps
-                global_plan_world_coord = self.global_plan_world_coord
-            
-            self._waypoint_planner.set_route(global_plan_gps, global_plan_world_coord)
+        if random_start:
+            print('random_start')
+
+        reset_position = route_completed or \
+            self.eval or \
+            random_start
+
+        if reset_position:
+            start = 0
+            if random_start:
+                start = np.random.randint(len(self.trajectory) - 2)
+            global_plan_gps, global_plan_world_coord = interpolate_trajectory(
+                self._world, self.trajectory[start:])
+
+            self._waypoint_planner.set_route(
+                global_plan_gps, global_plan_world_coord)
             ds_ids = downsample_route(global_plan_world_coord, 50)
             global_plan_gps = [global_plan_gps[x] for x in ds_ids]
             global_plan_world_coord = [
                 global_plan_world_coord[x] for x in ds_ids]
             self._command_planner.set_route(
                 global_plan_gps, global_plan_world_coord)
+            start_pose = global_plan_world_coord[0][0]
+            start_pose.location.z += 0.5
 
-        if self._player and not random_restart:
+        else:
             transform = self._player.get_transform()
             start_pose = self._waypoint_planner.route[0][2]
             start_pose.location.z = transform.location.z
-            
+
         return start_pose
 
     def reset_player_position(self):
@@ -403,7 +405,7 @@ class CarlaEnv(gym.Env):
         obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
 
         self.cur_length += 1
-        
+
         done = False
 
         info = {
