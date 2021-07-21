@@ -65,11 +65,7 @@ def read_params():
         # Model log std deviation
         'std_dev': [
             {
-                'logstd': [-1.0, -2.8],
-                'limit': 100
-            },
-            {
-                'logstd': [-2.0, -2.8]
+                'logstd': [-1.0, -3.2],
             }
         ],
 
@@ -85,7 +81,7 @@ def read_params():
         # GAIL Optimizer betas param
         'gail_betas': [0.9, 0.99],
         # GAIL consistency term lambda
-        'gail_ct_lambda': 0,
+        'gail_ct_lambda': 0.3,
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch

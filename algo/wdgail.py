@@ -211,10 +211,10 @@ class Discriminator(nn.Module):
 
         return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, ct/n, expert_ac_loss / n, policy_ac_loss / n
 
-    def compute_loss(self, expert_loader, rollouts):
+    def compute_loss(self, expert_loader, rollouts, batch_size=None):
         with torch.no_grad():
             policy_data_generator = rollouts.feed_forward_generator(
-                None, mini_batch_size=expert_loader.batch_size)
+                None, mini_batch_size=expert_loader.batch_size, batch_size=batch_size)
             total_loss = 0
             policy_reward = 0
             expert_reward = 0
@@ -248,6 +248,9 @@ class Discriminator(nn.Module):
                 wd = expert_loss - policy_loss
                 total_loss += wd.sum().item()
                 n += policy_state.shape[0]
+
+            if n == 0:
+                return total_loss, expert_reward, policy_reward
 
             return total_loss/n, expert_reward/n, policy_reward/n
 
