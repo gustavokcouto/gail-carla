@@ -7,19 +7,18 @@ from vec_env.subproc_vec_env import SubprocVecEnv
 from common.running_mean_std import RunningMeanStd
 
 
-def make_env(env_id):
+def make_env(ep_length, route_file, env_id):
     def _thunk():
-        env = CarlaEnv(env_id)
+        env = CarlaEnv(ep_length, route_file, env_id,)
 
         return env
 
     return _thunk
 
 
-def make_vec_envs(num_processes,
-                  device):
+def make_vec_envs(num_processes, device, ep_length, route_file):
     envs = [
-        make_env(i)
+        make_env(ep_length, route_file, i)
         for i in range(num_processes)
     ]
 

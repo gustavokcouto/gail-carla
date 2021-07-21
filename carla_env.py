@@ -11,7 +11,6 @@ import carla
 from agents.navigation.local_planner import RoadOption
 
 from PIL import Image, ImageDraw
-from pathlib import Path
 from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
 from auto_pilot.planner import RoutePlanner, Plotter
@@ -159,7 +158,7 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, env_id=0, train=True, eval=False):
+    def __init__(self, ep_length, route_file, env_id=0, train=True, eval=False):
         super(CarlaEnv, self).__init__()
         if env_id < 5:
             port = 2000 + 2 * env_id
@@ -199,13 +198,12 @@ class CarlaEnv(gym.Env):
         self.metrics_space = spaces.Box(low=-100, high=100,
                                         shape=(3 + len(self.road_options),), dtype=np.float32)
 
-        route_file = Path('data/route_00.xml')
         self.trajectory = parse_routes_file(route_file)
 
         self._waypoint_planner = RoutePlanner(1e-5, 5e-4)
         self._command_planner = RoutePlanner(1e-4, 2.5e-4, 258)
 
-        self.ep_length = 2400
+        self.ep_length = ep_length
         self.collision_sensor = None
         self.lane_sensor = None
         self._speed_controller = PIDController(K_P=5.0, K_I=0.5, K_D=1.0, n=40)

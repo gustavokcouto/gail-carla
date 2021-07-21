@@ -7,6 +7,7 @@ import torch
 import json
 import os
 import sys
+from pathlib import Path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # GAIL baseline
@@ -33,11 +34,17 @@ def read_params():
         # use linear lr decay
         'use_linear_lr_decay': False,
 
+        # environment
+        # env episode max steps
+        'env_ep_length': 800,
+        # env route file path
+        'env_route_file': Path('data/route_01.xml'),
+
         # ppo
         # num_processes
         'num_processes': 10,
         # num-steps
-        'num_steps': 7200,
+        'num_steps': 800,
         # learning rate
         'lr': 2.5e-4,
         # ppo epoch num
@@ -65,7 +72,7 @@ def read_params():
         # Model log std deviation
         'std_dev': [
             {
-                'logstd': [-1.0, -3.2],
+                'logstd': [-2.0, -3.2],
             }
         ],
 
@@ -85,9 +92,9 @@ def read_params():
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 10,
+        'gail_pre_epoch': 50,
         # number of steps to train discriminator in each epoch
-        'gail_epoch': 2,
+        'gail_epoch': 10,
         # max norm of gradients (default: 0.5)
         'gail_max_grad_norm': 0.5,
         # num trajs
@@ -170,8 +177,8 @@ def train(params):
         shuffle=True,
         drop_last=True)
 
-    envs = make_vec_envs(params['num_processes'], device)
-    env_eval = CarlaEnv(eval=True)
+    envs = make_vec_envs(params['num_processes'], device, params['env_ep_length'], params['env_route_file'])
+    env_eval = CarlaEnv(params['env_ep_length'], params['env_route_file'], eval=True)
 
     # network
     actor_critic = Policy(
