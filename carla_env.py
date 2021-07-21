@@ -158,17 +158,8 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, ep_length, route_file, env_id=0, train=True, eval=False):
+    def __init__(self, host, port, ep_length, route_file, train=True, eval=False):
         super(CarlaEnv, self).__init__()
-        if env_id < 5:
-            port = 2000 + 2 * env_id
-            host = '192.168.0.4'
-        else:
-            port = 2000 + 2 * (env_id - 5)
-            host = '192.168.0.5'
-        if eval:
-            port = 2000
-            host = 'localhost'
 
         self._client = carla.Client(host, port)
         self._client.set_timeout(30.0)

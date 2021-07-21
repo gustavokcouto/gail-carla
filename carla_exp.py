@@ -23,7 +23,9 @@ def gen_trajectories(file_path=''):
     np.random.seed(1337)
     route_file = Path('data/route_01.xml')
     ep_len = 800
-    env = CarlaEnv(ep_len, route_file, train=False, eval=True)
+    host = 'localhost'
+    port = 2000
+    env = CarlaEnv(host, port, ep_len, route_file, train=False, eval=True)
 
     trajectory = parse_routes_file(route_file)
     global_plan_gps, global_plan_world_coord = interpolate_trajectory(env._world, trajectory)

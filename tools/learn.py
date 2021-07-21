@@ -41,14 +41,14 @@ def gailLearning_mujoco_origin(run_params,
     # begin optimize
     nsteps = run_params['num_steps']
 
-    nenv = run_params['num_processes']
+    nenv = len(run_params['envs_params'])
 
     nbatch = np.floor(nsteps/nenv)
     nbatch = nbatch.astype(np.int16)
 
     # The buffer
     rollouts = RolloutStorage(nbatch,
-                              run_params['num_processes'],
+                              len(run_params['envs_params']),
                               envs.observation_space.shape,
                               envs.metrics_space.shape,
                               envs.action_space)
@@ -68,7 +68,7 @@ def gailLearning_mujoco_origin(run_params,
 
     episode_rewards = deque(maxlen=10)
 
-    cum_gailrewards = [.0 for _ in range(run_params['num_processes'])]
+    cum_gailrewards = [.0 for _ in range(len(run_params['envs_params']))]
 
     i_update = 0
 
@@ -182,7 +182,7 @@ def gailLearning_mujoco_origin(run_params,
                 run_params['gamma'],
                 rollouts.masks[step])
 
-            for i_env in range(run_params['num_processes']):
+            for i_env in range(len(run_params['envs_params'])):
                 if rollouts.masks[step][i_env]:
                     cum_gailrewards[i_env] += rollouts.gail_rewards[step][i_env].item()
                 else:

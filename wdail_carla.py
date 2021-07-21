@@ -39,10 +39,23 @@ def read_params():
         'env_ep_length': 800,
         # env route file path
         'env_route_file': Path('data/route_01.xml'),
+        # train envs ip and port list
+        'envs_params': [
+            {'host': '192.168.0.4', 'port': 2000},
+            {'host': '192.168.0.4', 'port': 2002},
+            {'host': '192.168.0.4', 'port': 2004},
+            {'host': '192.168.0.4', 'port': 2006},
+            {'host': '192.168.0.4', 'port': 2008},
+            # {'host': '192.168.0.5', 'port': 2000},
+            # {'host': '192.168.0.5', 'port': 2002},
+            # {'host': '192.168.0.5', 'port': 2004},
+            # {'host': '192.168.0.5', 'port': 2006},
+            # {'host': '192.168.0.5', 'port': 2008}
+        ],
+        # eval env ip and port list
+        'env_eval_params': {'host': 'localhost', 'port': 2000},
 
         # ppo
-        # num_processes
-        'num_processes': 10,
         # num-steps
         'num_steps': 800,
         # learning rate
@@ -177,8 +190,15 @@ def train(params):
         shuffle=True,
         drop_last=True)
 
-    envs = make_vec_envs(params['num_processes'], device, params['env_ep_length'], params['env_route_file'])
-    env_eval = CarlaEnv(params['env_ep_length'], params['env_route_file'], eval=True)
+    envs = make_vec_envs(params['envs_params'], device,
+                         params['env_ep_length'], params['env_route_file'])
+    env_eval = CarlaEnv(
+        params['env_eval_params']['host'],
+        params['env_eval_params']['port'],
+        params['env_ep_length'],
+        params['env_route_file'],
+        eval=True
+    )
 
     # network
     actor_critic = Policy(
