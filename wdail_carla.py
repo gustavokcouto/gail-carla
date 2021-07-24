@@ -59,7 +59,7 @@ def read_params():
         # num-steps
         'num_steps': 800,
         # learning rate
-        'lr': 2.5e-4,
+        'lr': 1.0e-4,
         # ppo epoch num
         'ppo_epoch': 4,
         # number of batches for ppo (default: 32)
@@ -101,7 +101,7 @@ def read_params():
         # GAIL Optimizer betas param
         'gail_betas': [0.9, 0.99],
         # GAIL consistency term lambda
-        'gail_ct_lambda': 0.3,
+        'gail_ct_lambda': 2,
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
