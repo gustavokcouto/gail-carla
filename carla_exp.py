@@ -101,5 +101,5 @@ def gen_trajectories(file_path=''):
         torch.save(data, file_path)
 
 if __name__ == "__main__":
-    gen_trajectories('gail_experts/trajs_carla.pt')
+    gen_trajectories('gail_experts/route_01/trajs_carla.pt')
     pass
