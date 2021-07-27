@@ -36,28 +36,23 @@ def read_params():
 
         # environment
         # env episode max steps
-        'env_ep_length': 2400,
+        'env_ep_length': 800,
         # env route file path
-        'trajectory': 'route_00',
+        'trajectory': 'route_01',
         # train envs ip and port list
         'envs_params': [
             {'host': '192.168.0.4', 'port': 2000},
             {'host': '192.168.0.4', 'port': 2002},
             {'host': '192.168.0.4', 'port': 2004},
             {'host': '192.168.0.4', 'port': 2006},
-            {'host': '192.168.0.4', 'port': 2008},
-            # {'host': '192.168.0.5', 'port': 2000},
-            # {'host': '192.168.0.5', 'port': 2002},
-            # {'host': '192.168.0.5', 'port': 2004},
-            # {'host': '192.168.0.5', 'port': 2006},
-            # {'host': '192.168.0.5', 'port': 2008}
+            {'host': '192.168.0.4', 'port': 2008}
         ],
         # eval env ip and port list
         'env_eval_params': {'host': 'localhost', 'port': 2000},
 
         # ppo
         # num-steps
-        'num_steps': 7200,
+        'num_steps': 2000,
         # learning rate
         'lr': 1.0e-4,
         # ppo epoch num
@@ -85,11 +80,7 @@ def read_params():
         # Model log std deviation
         'std_dev': [
             {
-                'logstd': [-1.0, -2.8],
-                'limit': 100
-            },
-            {
-                'logstd': [-2.0, -2.8]
+                'logstd': [-2.0, -3.2]
             }
         ],
 
@@ -109,9 +100,9 @@ def read_params():
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 10,
+        'gail_pre_epoch': 20,
         # number of steps to train discriminator in each epoch
-        'gail_epoch': 2,
+        'gail_epoch': 4,
         # max norm of gradients (default: 0.5)
         'gail_max_grad_norm': 0.5,
         # num trajs
