@@ -14,26 +14,39 @@ import torch.optim as optim
 
 
 class Discriminator(nn.Module):
-    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, ct_lambda, max_grad_norm=None):
+    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, ct_lambda, use_dropout, max_grad_norm=None):
         super(Discriminator, self).__init__()
         self.device = device
         C, H, W = state_shape
 
-        self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.5),
-            nn.Conv2d(32, 64, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.5),
-            nn.Conv2d(64, 128, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.5),
-            nn.Conv2d(128, 256, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.5),
-            Flatten(),
-        ).to(device)
+        if use_dropout:
+            self.main = nn.Sequential(
+                nn.Conv2d(C, 32, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                nn.Conv2d(32, 64, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                nn.Conv2d(64, 128, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                nn.Conv2d(128, 256, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                Flatten(),
+            ).to(device)
+        else:
+            self.main = nn.Sequential(
+                nn.Conv2d(C, 32, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                nn.Conv2d(32, 64, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                nn.Conv2d(64, 128, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                nn.Conv2d(128, 256, 4, stride=2, bias=False),
+                nn.LeakyReLU(0.2),
+                Flatten(),
+            ).to(device)
 
         for i in range(4):
             H = (H - 4)//2 + 1
@@ -41,11 +54,18 @@ class Discriminator(nn.Module):
         # Get image dim
         img_dim = 256*H*W
 
-        self.trunk = nn.Sequential(
-            nn.Linear(
-                img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.5)).to(device)
+        if use_dropout:
+            self.trunk = nn.Sequential(
+                nn.Linear(
+                    img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5)).to(device)
+        else:
+            self.trunk = nn.Sequential(
+                nn.Linear(
+                    img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
+                nn.LeakyReLU(0.2)).to(device)
+
         self.last_layer = nn.Sequential(nn.Linear(hidden_dim, 1)).to(device)
 
         self.main.train()

@@ -96,7 +96,9 @@ def read_params():
         # GAIL Optimizer betas param
         'gail_betas': [0.9, 0.99],
         # GAIL consistency term lambda
-        'gail_ct_lambda': 2,
+        'gail_ct_lambda': 2.0,
+        # GAIL use dropout on critic network
+        'gail_use_dropout': True,
         # duration of gail pre epoch
         'gail_thre': 5,
         # number of steps to train discriminator during pre epoch
@@ -119,7 +121,7 @@ def read_params():
         # bcgail
         'bcgail': 1,
         'decay': 0.99,
-        'gailgamma': 0.0,
+        'gailgamma': 0.125,
         # Use final activation? (Useful for certain scenarios)
         'use_activation': True
     }
@@ -235,6 +237,7 @@ def train(params):
         params['gail_eps'],
         params['gail_betas'],
         params['gail_ct_lambda'],
+        params['gail_use_dropout'],
         params['gail_max_grad_norm'],
     )
 
