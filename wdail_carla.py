@@ -18,120 +18,120 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
 def read_params():
-    params = {
-        # environment ID
-        'env_name': 'carla',
-        # algorithm ID
-        'algo': 'WDAIL',
+    # params = {
+    #     # environment ID
+    #     'env_name': 'carla',
+    #     # algorithm ID
+    #     'algo': 'WDAIL',
 
-        # general
-        # total steps
-        'num_env_steps': 10e6,
-        # num_model
-        'cuda': 0,
-        # seed
-        'seed': 1,
-        # use linear lr decay
-        'use_linear_lr_decay': False,
+    #     # general
+    #     # total steps
+    #     'num_env_steps': 10e6,
+    #     # num_model
+    #     'cuda': 0,
+    #     # seed
+    #     'seed': 1,
+    #     # use linear lr decay
+    #     'use_linear_lr_decay': False,
 
-        # environment
-        # env episode max steps
-        'env_ep_length': 2400,
-        # env route file path
-        'trajectory': 'route_00',
-        # train envs ip and port list
-        'envs_params': [
-            {'host': '192.168.0.4', 'port': 2000},
-            {'host': '192.168.0.4', 'port': 2002},
-            {'host': '192.168.0.4', 'port': 2004},
-            {'host': '192.168.0.4', 'port': 2006},
-            {'host': '192.168.0.4', 'port': 2008},
-            {'host': '192.168.0.5', 'port': 2000},
-            {'host': '192.168.0.5', 'port': 2002},
-            {'host': '192.168.0.5', 'port': 2004},
-            {'host': '192.168.0.5', 'port': 2006},
-            {'host': '192.168.0.5', 'port': 2008}
-        ],
-        # eval env ip and port list
-        'env_eval_params': {'host': 'localhost', 'port': 2000},
+    #     # environment
+    #     # env episode max steps
+    #     'env_ep_length': 2400,
+    #     # env route file path
+    #     'trajectory': 'route_00',
+    #     # train envs ip and port list
+    #     'envs_params': [
+    #         {'host': '192.168.0.4', 'port': 2000},
+    #         {'host': '192.168.0.4', 'port': 2002},
+    #         {'host': '192.168.0.4', 'port': 2004},
+    #         {'host': '192.168.0.4', 'port': 2006},
+    #         {'host': '192.168.0.4', 'port': 2008},
+    #         {'host': '192.168.0.5', 'port': 2000},
+    #         {'host': '192.168.0.5', 'port': 2002},
+    #         {'host': '192.168.0.5', 'port': 2004},
+    #         {'host': '192.168.0.5', 'port': 2006},
+    #         {'host': '192.168.0.5', 'port': 2008}
+    #     ],
+    #     # eval env ip and port list
+    #     'env_eval_params': {'host': 'localhost', 'port': 2000},
 
-        # ppo
-        # num-steps
-        'num_steps': 7200,
-        # learning rate
-        'lr': 1.0e-4,
-        # ppo epoch num
-        'ppo_epoch': 4,
-        # number of batches for ppo (default: 32)
-        'num_mini_batch': 8,
-        # ppo clip parameter (default: 0.2)
-        'clip_param': 0.1,
-        # ADAM optimizer epsilon (default: 1e-5)
-        'eps': 1e-8,
-        # ADAM Optimizer betas param
-        'betas': [0.9, 0.99],
-        # discount factor for rewards (default: 0.99)
-        'gamma': 0.99,
-        # gae lambda parameter (default: 0.95)
-        'gae_lambda': 0.95,
-        # entropy term coefficient (default: 0.01)
-        'entropy_coef': 0.0,
-        # variable entropy (std dev as net parameter)
-        'var_ent': False,
-        # value loss coefficient (default: 0.5)
-        'value_loss_coef': 0.5,
-        # max norm of gradients (default: 0.5)
-        'max_grad_norm': 0.5,
-        # Model log std deviation
-        'std_dev': [
-            {
-                'logstd': [-2.0, -3.2]
-            }
-        ],
+    #     # ppo
+    #     # num-steps
+    #     'num_steps': 7200,
+    #     # learning rate
+    #     'lr': 1.0e-4,
+    #     # ppo epoch num
+    #     'ppo_epoch': 4,
+    #     # number of batches for ppo (default: 32)
+    #     'num_mini_batch': 8,
+    #     # ppo clip parameter (default: 0.2)
+    #     'clip_param': 0.1,
+    #     # ADAM optimizer epsilon (default: 1e-5)
+    #     'eps': 1e-8,
+    #     # ADAM Optimizer betas param
+    #     'betas': [0.9, 0.99],
+    #     # discount factor for rewards (default: 0.99)
+    #     'gamma': 0.99,
+    #     # gae lambda parameter (default: 0.95)
+    #     'gae_lambda': 0.95,
+    #     # entropy term coefficient (default: 0.01)
+    #     'entropy_coef': 0.0,
+    #     # variable entropy (std dev as net parameter)
+    #     'var_ent': False,
+    #     # value loss coefficient (default: 0.5)
+    #     'value_loss_coef': 0.5,
+    #     # max norm of gradients (default: 0.5)
+    #     'max_grad_norm': 0.5,
+    #     # Model log std deviation
+    #     'std_dev': [
+    #         {
+    #             'logstd': [-2.0, -3.2]
+    #         }
+    #     ],
 
-        # gail
-        # directory that contains expert demonstrations for gail
-        'gail_experts_dir': './gail_experts',
-        # gail batch size (default: 128)
-        'gail_batch_size': 128,
-        # gail learning rate
-        'gail_lr': 2.5e-4,
-        # ADAM optimizer epsilon (default: 1e-5)
-        'gail_eps': 1e-8,
-        # GAIL Optimizer betas param
-        'gail_betas': [0.9, 0.99],
-        # GAIL consistency term lambda
-        'gail_ct_lambda': 2.0,
-        # GAIL use dropout on critic network
-        'gail_use_dropout': True,
-        # duration of gail pre epoch
-        'gail_thre': 5,
-        # number of steps to train discriminator during pre epoch
-        'gail_pre_epoch': 10,
-        # number of steps to train discriminator in each epoch
-        'gail_epoch': 2,
-        # max norm of gradients (default: 0.5)
-        'gail_max_grad_norm': 0.5,
-        # num trajs
-        'num_trajs': 10,
-        # num validation trajs
-        'num_val_trajs': 2,
-        # trajectories subsample frequency
-        'subsample_frequency': 1,
-        # log interval, one log per n updates (default: 10)
-        'log_interval': 1,
-        # eval interval, one eval per n updates (default: 10)
-        'eval_interval': 3,
+    #     # gail
+    #     # directory that contains expert demonstrations for gail
+    #     'gail_experts_dir': './gail_experts',
+    #     # gail batch size (default: 128)
+    #     'gail_batch_size': 128,
+    #     # gail learning rate
+    #     'gail_lr': 2.5e-4,
+    #     # ADAM optimizer epsilon (default: 1e-5)
+    #     'gail_eps': 1e-8,
+    #     # GAIL Optimizer betas param
+    #     'gail_betas': [0.9, 0.99],
+    #     # GAIL consistency term lambda
+    #     'gail_ct_lambda': 2.0,
+    #     # GAIL use dropout on critic network
+    #     'gail_use_dropout': True,
+    #     # duration of gail pre epoch
+    #     'gail_thre': 5,
+    #     # number of steps to train discriminator during pre epoch
+    #     'gail_pre_epoch': 10,
+    #     # number of steps to train discriminator in each epoch
+    #     'gail_epoch': 2,
+    #     # max norm of gradients (default: 0.5)
+    #     'gail_max_grad_norm': 0.5,
+    #     # num trajs
+    #     'num_trajs': 10,
+    #     # num validation trajs
+    #     'num_val_trajs': 2,
+    #     # trajectories subsample frequency
+    #     'subsample_frequency': 1,
+    #     # log interval, one log per n updates (default: 10)
+    #     'log_interval': 1,
+    #     # eval interval, one eval per n updates (default: 10)
+    #     'eval_interval': 3,
 
-        # bcgail
-        'bcgail': 1,
-        'decay': 0.99,
-        'gailgamma': 0.0,
-        # Use final activation? (Useful for certain scenarios)
-        'use_activation': True
-    }
-
-    config_file = open('params.json')
+    #     # bcgail
+    #     'bcgail': 1,
+    #     'decay': 0.99,
+    #     'gailgamma': 0.125,
+    #     # Use final activation? (Useful for certain scenarios)
+    #     'use_activation': True
+    # }
+    params = {}
+    config_file = open('params_short.json')
     config = json.load(config_file)
     params.update(config)
     return params

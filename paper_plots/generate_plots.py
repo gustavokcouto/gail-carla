@@ -80,4 +80,6 @@ for results_files in [results_short, results_short_ct, results_short_bc_ct]:
 plt.xlabel(r'# environment interactions ($ \times 10^5$)')
 plt.ylabel('Reward')
 plt.legend(loc='lower right', shadow=True, fontsize='x-large')
-plt.savefig('paper_plots/short_all')
+plt.savefig('paper_plots/short_all.eps')
+
+# generate eps
