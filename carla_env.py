@@ -158,11 +158,12 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, host, port, ep_length, route_file, train=True, eval=False):
+    def __init__(self, host, port, ep_length, route_file, train=True, eval=False, env_id=None):
         super(CarlaEnv, self).__init__()
 
         self._client = carla.Client(host, port)
         self._client.set_timeout(30.0)
+        self.env_id = env_id
 
         set_sync_mode(self._client, False)
 
@@ -397,15 +398,6 @@ class CarlaEnv(gym.Env):
 
         done = False
 
-        info = {
-            'x': transform.location.x,
-            'y': transform.location.y,
-            'yaw': transform.rotation.yaw,
-            'speed': speed,
-            'gps_x': gps[0],
-            'gps_y': gps[1],
-            'compass': compass,
-        }
         reward = 0
         if self.lane_invasion:
             reward -= 2
@@ -419,6 +411,23 @@ class CarlaEnv(gym.Env):
 
         self.episode_reward += reward
         self.last_route_metrics = route_metrics
+
+        info = {
+            'x': transform.location.x,
+            'y': transform.location.y,
+            'yaw': transform.rotation.yaw,
+            'speed': speed,
+            'gps_x': gps[0],
+            'gps_y': gps[1],
+            'target_x': target[0],
+            'target_y': target[1],
+            'road_option': road_option,
+            'reward': reward,
+            'compass': compass,
+            'steer': control.steer,
+            'throttle': control.throttle,
+            'brake': control.brake
+        }
 
         self.route_completed = self._waypoint_planner.route_completed()
         if (self.cur_length >= self.ep_length - 1

@@ -1,5 +1,7 @@
+from pathlib import Path
 import numpy as np
 import torch
+import pandas as pd
 
 from carla_env import CarlaEnv
 from vec_env.vec_env import VecEnvWrapper
@@ -7,9 +9,11 @@ from vec_env.subproc_vec_env import SubprocVecEnv
 from common.running_mean_std import RunningMeanStd
 
 
-def make_env(env_host, env_port, ep_length, route_file):
+def make_env(env_host, env_port, ep_length, route_file, env_id):
     def _thunk():
-        env = CarlaEnv(env_host, env_port, ep_length, route_file)
+        env = CarlaEnv(env_host, env_port, ep_length, route_file, env_id=env_id)
+
+        env = EnvMonitor(env)
 
         return env
 
@@ -18,8 +22,8 @@ def make_env(env_host, env_port, ep_length, route_file):
 
 def make_vec_envs(envs_params, device, ep_length, route_file):
     envs = [
-        make_env(env_params['host'], env_params['port'], ep_length, route_file)
-        for env_params in envs_params
+        make_env(env_params['host'], env_params['port'], ep_length, route_file, 'train_env_{}'.format(env_id))
+        for env_id, env_params in enumerate(envs_params)
     ]
 
     envs = SubprocVecEnv(envs)
@@ -30,6 +34,34 @@ def make_vec_envs(envs_params, device, ep_length, route_file):
 
     return envs
 
+
+class EnvMonitor():
+    def __init__(self, env) -> None:
+        self.env = env
+        self.env_id = env.env_id
+        self.ep_df = pd.DataFrame()
+        self.ep_count = 0
+        self.output_path = Path("runs/env_info/{}".format(self.env_id))
+        self.output_path.mkdir(parents=True, exist_ok=True)
+        self.action_space = self.env.action_space
+        self.observation_space = self.env.observation_space
+        self.metrics_space = self.env.metrics_space
+        self.spec = self.env.spec
+
+    def step(self, action):
+        obs, metrics, reward, done, info = self.env.step(action)
+        self.ep_df = self.ep_df.append(info, ignore_index=True)
+        return obs, metrics, reward, done, info
+    
+    def reset(self):
+        obs, metrics = self.env.reset()
+        self.ep_df.to_csv(self.output_path / '{}.csv'.format(self.ep_count), index=False)
+        self.ep_count += 1
+        return obs, metrics
+
+    def close(self):
+        self.env.close()
+        pass
 
 class VecNormalize(VecEnvWrapper):
     """
