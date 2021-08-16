@@ -9,6 +9,18 @@ from vec_env.subproc_vec_env import SubprocVecEnv
 from common.running_mean_std import RunningMeanStd
 
 
+class EnvEpoch():
+    envs_epoch = 0
+
+    @classmethod
+    def set_epoch(cls, i_epoch):
+        cls.envs_epoch = i_epoch
+
+    @classmethod
+    def get_epoch(cls):
+        return cls.envs_epoch
+
+
 def make_env(env_host, env_port, ep_length, route_file, env_id):
     def _thunk():
         env = CarlaEnv(env_host, env_port, ep_length, route_file, env_id=env_id)
@@ -41,22 +53,37 @@ class EnvMonitor():
         self.env_id = env.env_id
         self.ep_df = pd.DataFrame()
         self.ep_count = 0
-        self.output_path = Path("runs/env_info/{}".format(self.env_id))
+        self.output_path = Path("runs/env_info")
         self.output_path.mkdir(parents=True, exist_ok=True)
         self.action_space = self.env.action_space
         self.observation_space = self.env.observation_space
         self.metrics_space = self.env.metrics_space
         self.spec = self.env.spec
+        self.ep_length = self.env.ep_length
 
     def step(self, action):
         obs, metrics, reward, done, info = self.env.step(action)
+        info['ep_count'] = self.ep_count
+        info['i_epoch'] = EnvEpoch.get_epoch()
         self.ep_df = self.ep_df.append(info, ignore_index=True)
         return obs, metrics, reward, done, info
     
     def reset(self):
         obs, metrics = self.env.reset()
-        self.ep_df.to_csv(self.output_path / '{}.csv'.format(self.ep_count), index=False)
+        if self.ep_count < 2:
+            self.ep_df.to_csv(
+                self.output_path / '{}.csv'.format(self.env_id),
+                index=False
+            )
+        else:
+            self.ep_df.to_csv(
+                self.output_path / '{}.csv'.format(self.env_id),
+                index=False,
+                mode='a',
+                header=False
+            )
         self.ep_count += 1
+        self.ep_df = pd.DataFrame()
         return obs, metrics
 
     def close(self):

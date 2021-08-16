@@ -131,7 +131,7 @@ def read_params():
     #     'use_activation': True
     # }
     params = {}
-    config_file = open('params_short.json')
+    config_file = open('params_long.json')
     config = json.load(config_file)
     params.update(config)
     return params
@@ -150,7 +150,7 @@ def train(params):
 
     from tools import utli
     from tools import utils
-    from tools.envs import make_vec_envs
+    from tools.envs import make_vec_envs, EnvMonitor
 
     from carla_env import CarlaEnv
 
@@ -200,8 +200,10 @@ def train(params):
         params['env_eval_params']['port'],
         params['env_ep_length'],
         env_route_file,
-        eval=True
+        eval=True,
+        env_id='eval_env'
     )
+    env_eval = EnvMonitor(env_eval)
 
     # network
     actor_critic = Policy(

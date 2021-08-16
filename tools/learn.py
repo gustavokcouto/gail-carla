@@ -7,7 +7,7 @@ from collections import deque
 import time
 from tools import utils, utli
 from tools.storage import RolloutStorage
-
+from tools.envs import EnvEpoch
 
 def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
@@ -94,6 +94,7 @@ def gailLearning_mujoco_origin(run_params,
                 run_params['lr'])
 
         actor_critic.set_epoch(i_update)
+        EnvEpoch.set_epoch(i_update)
 
         for step in range(nbatch):
             time_step += 1
