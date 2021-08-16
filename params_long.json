@@ -20,7 +20,7 @@
         {"host": "192.168.0.5", "port": 2006},
         {"host": "192.168.0.5", "port": 2008}
     ],
-    "env_eval_params": {"host": "localhost", "port": 2000},
+    "env_eval_params": {"host": "192.168.0.4", "port": 2010},
 
     "num_steps": 7200,
     "lr": 1.0e-4,
@@ -58,6 +58,6 @@
     "eval_interval": 3,
     "bcgail": 1,
     "decay": 0.99,
-    "gailgamma": 0.125,
+    "gailgamma": 0.0,
     "use_activation": true
 }
