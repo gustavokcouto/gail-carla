@@ -12,6 +12,7 @@ rcParams['mathtext.fontset'] = 'stix'
 rcParams['axes.titlesize'] = fontsize
 rcParams['axes.labelsize'] = fontsize
 rcParams['text.usetex'] = True
+rcParams["savefig.dpi"] = 150
 
 results_dataset = [
     [
@@ -64,6 +65,5 @@ for results_files in results_dataset:
 plt.xlabel(r'environment interactions ($ \times 10^5$)')
 plt.ylabel('Reward')
 plt.legend(loc='upper left', shadow=True)
-plt.savefig('paper_plots/plots/long_dis_val_dif.eps')
 plt.savefig('paper_plots/plots/long_dis_val_dif.png')
 plt.clf()

@@ -12,6 +12,7 @@ rcParams['mathtext.fontset'] = 'stix'
 rcParams['axes.titlesize'] = fontsize
 rcParams['axes.labelsize'] = fontsize
 rcParams['text.usetex'] = True
+rcParams["savefig.dpi"] = 150
 
 results_dataset = [
     [
@@ -23,24 +24,24 @@ results_dataset = [
         'paper_plots/short/run-article_results_short_3-tag-Eval_reward.csv',
         'gail'
     ],
-    [
-        'paper_plots/short_ct/run-article_results_short_ct_1-tag-Train_reward.csv',
-        'paper_plots/short_ct/run-article_results_short_ct_2-tag-Train_reward.csv',
-        'paper_plots/short_ct/run-article_results_short_ct_3-tag-Train_reward.csv',
-        'paper_plots/short_ct/run-article_results_short_ct_1-tag-Eval_reward.csv',
-        'paper_plots/short_ct/run-article_results_short_ct_2-tag-Eval_reward.csv',
-        'paper_plots/short_ct/run-article_results_short_ct_3-tag-Eval_reward.csv',
-        'gail + dropout'
-    ],
-    [
-        'paper_plots/short_ct_bc/run-article_results_short_ct_bc_1-tag-Train_reward.csv',
-        'paper_plots/short_ct_bc/run-article_results_short_ct_bc_2-tag-Train_reward.csv',
-        'paper_plots/short_ct_bc/run-article_results_short_ct_bc_3-tag-Train_reward.csv',
-        'paper_plots/short_ct_bc/run-article_results_short_ct_bc_1-tag-Eval_reward.csv',
-        'paper_plots/short_ct_bc/run-article_results_short_ct_bc_2-tag-Eval_reward.csv',
-        'paper_plots/short_ct_bc/run-article_results_short_ct_bc_3-tag-Eval_reward.csv',
-        'bc + gail + dropout'
-    ],
+    # [
+    #     'paper_plots/short_ct/run-article_results_short_ct_1-tag-Train_reward.csv',
+    #     'paper_plots/short_ct/run-article_results_short_ct_2-tag-Train_reward.csv',
+    #     'paper_plots/short_ct/run-article_results_short_ct_3-tag-Train_reward.csv',
+    #     'paper_plots/short_ct/run-article_results_short_ct_1-tag-Eval_reward.csv',
+    #     'paper_plots/short_ct/run-article_results_short_ct_2-tag-Eval_reward.csv',
+    #     'paper_plots/short_ct/run-article_results_short_ct_3-tag-Eval_reward.csv',
+    #     'gail + dropout'
+    # ],
+    # [
+    #     'paper_plots/short_ct_bc/run-article_results_short_ct_bc_1-tag-Train_reward.csv',
+    #     'paper_plots/short_ct_bc/run-article_results_short_ct_bc_2-tag-Train_reward.csv',
+    #     'paper_plots/short_ct_bc/run-article_results_short_ct_bc_3-tag-Train_reward.csv',
+    #     'paper_plots/short_ct_bc/run-article_results_short_ct_bc_1-tag-Eval_reward.csv',
+    #     'paper_plots/short_ct_bc/run-article_results_short_ct_bc_2-tag-Eval_reward.csv',
+    #     'paper_plots/short_ct_bc/run-article_results_short_ct_bc_3-tag-Eval_reward.csv',
+    #     'bc + gail + dropout'
+    # ],
     [
         'paper_plots/short_bc/run-article_results_short_bc_1-tag-Train_reward.csv',
         'paper_plots/short_bc/run-article_results_short_bc_2-tag-Train_reward.csv',
@@ -48,7 +49,7 @@ results_dataset = [
         'paper_plots/short_bc/run-article_results_short_bc_1-tag-Eval_reward.csv',
         'paper_plots/short_bc/run-article_results_short_bc_2-tag-Eval_reward.csv',
         'paper_plots/short_bc/run-article_results_short_bc_3-tag-Eval_reward.csv',
-        'bc + gail'
+        'bc\_gail'
     ]
 ]
 
@@ -80,8 +81,7 @@ for results_files in results_dataset:
 plt.xlabel(r'environment interactions ($ \times 10^5$)')
 plt.ylabel('Reward')
 plt.legend(loc='lower right', shadow=True, fontsize='x-large')
-plt.savefig('paper_plots/plots/short_train_reward.eps')
-plt.savefig('paper_plots/plots/short_train_reward.png')
+plt.savefig('paper_plots/plots/short_train_reward.png', dpi=150)
 plt.clf()
 
 for results_files in results_dataset:
@@ -111,6 +111,4 @@ for results_files in results_dataset:
 
 plt.xlabel(r'environment interactions ($ \times 10^5$)')
 plt.ylabel('Reward')
-plt.legend(loc='lower right', shadow=True, fontsize='x-large')
-plt.savefig('paper_plots/plots/short_eval_reward.eps')
-plt.savefig('paper_plots/plots/short_eval_reward.png')
+plt.savefig('paper_plots/plots/short_eval_reward.png', dpi=150)
