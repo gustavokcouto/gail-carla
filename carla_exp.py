@@ -16,19 +16,26 @@ from auto_pilot.auto_pilot import AutoPilot
 
 from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
+from tools.envs import EnvMonitor
 
-
-def gen_trajectories(file_path=''):
+def gen_trajectories(route_file='', save_obs=True):
     # Instantiate the env
     np.random.seed(1337)
-    route_file = Path('data/route_01.xml')
-    ep_len = 800
+    ep_len = 2400
     host = 'localhost'
     port = 2000
-    env = CarlaEnv(host, port, ep_len, route_file, train=False, eval=True)
+    env = CarlaEnv(host, port, ep_len, route_file, train=False, eval=True, env_id='expert')
+    
+    expert_file_dir = Path('gail_experts') / route_file.stem
+    expert_file_dir.mkdir(parents=True, exist_ok=True)
+    (expert_file_dir / 'rgb').mkdir(parents=True, exist_ok=True)
+    (expert_file_dir / 'rgb_left').mkdir(parents=True, exist_ok=True)
+    (expert_file_dir / 'rgb_right').mkdir(parents=True, exist_ok=True)
+
+    env = EnvMonitor(env, output_path=expert_file_dir)
 
     trajectory = parse_routes_file(route_file)
-    global_plan_gps, global_plan_world_coord = interpolate_trajectory(env._world, trajectory)
+    global_plan_gps, global_plan_world_coord = interpolate_trajectory(env.env._world, trajectory)
 
     # Test the trained agent
     n_episodes = 12
@@ -45,28 +52,41 @@ def gen_trajectories(file_path=''):
         actions_ep = []
         rewards_ep = []
 
+        i_step = 0
         obs, step_metrics = env.reset()
         auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
-        while not env.route_completed:
+        while not env.env.route_completed:
             ego_metrics = [
-                env.info['gps_x'],
-                env.info['gps_y'],
-                env.info['compass'],
-                env.info['speed']
+                env.env.info['gps_x'],
+                env.env.info['gps_y'],
+                env.env.info['compass'],
+                env.env.info['speed']
             ]
             action = auto_pilot.run_step(ego_metrics)
 
             metrics_ep.append(step_metrics)
             reward = 0
             rewards_ep.append(reward)
-            states_ep.append(obs)
+            if save_obs:
+                states_ep.append(obs)
             actions_ep.append(action)
+            Image.fromarray(env.env.rgb_left).save(expert_file_dir / 'rgb_left' / ('%04d.png' % i_step))
+            Image.fromarray(env.env.rgb).save(expert_file_dir / 'rgb' / ('%04d.png' % i_step))
+            Image.fromarray(env.env.rgb_right).save(expert_file_dir / 'rgb_right' / ('%04d.png' % i_step))
 
             obs, step_metrics, reward, _, _ = env.step(action)
+            i_step += 1
+
         metrics_ep.append(step_metrics)
         reward = 0
         rewards_ep.append(reward)
-        states_ep.append(obs)
+        if save_obs:
+            states_ep.append(obs)
+
+        Image.fromarray(env.env.rgb_left).save(expert_file_dir / 'rgb_left' / ('%04d.png' % i_step))
+        Image.fromarray(env.env.rgb).save(expert_file_dir / 'rgb' / ('%04d.png' % i_step))
+        Image.fromarray(env.env.rgb_right).save(expert_file_dir / 'rgb_right' / ('%04d.png' % i_step))
+
         ep_len = len(actions_ep)
         if ep_len > max_len:
             max_len = ep_len
@@ -74,18 +94,17 @@ def gen_trajectories(file_path=''):
             for _ in range(max_len - ep_len):
                 metrics_ep.append(step_metrics)
                 rewards_ep.append(reward)
-                states_ep.append(obs)
+                if save_obs:
+                    states_ep.append(obs)
                 actions_ep.append(action)
 
-        states.append(states_ep)
+        if save_obs:
+            states.append(states_ep)
         actions.append(actions_ep)
         rewards.append(rewards_ep)
         metrics.append(metrics_ep)
         lens.append(ep_len)
-        
 
-
-    states = torch.as_tensor(states).float()
     metrics = torch.as_tensor(metrics).float()
     actions = torch.as_tensor(actions).float()
     lens = torch.as_tensor(lens).long()
@@ -97,9 +116,14 @@ def gen_trajectories(file_path=''):
         'lengths': lens,
         'rewards': rewards
     }
-    if file_path:
-        torch.save(data, file_path)
+
+    if save_obs:
+        states = torch.as_tensor(states).float()
+        data['states'] = states
+
+    expert_file = expert_file_dir / 'trajs_carla.pt'
+    torch.save(data, expert_file)
 
 if __name__ == "__main__":
-    gen_trajectories('gail_experts/route_01/trajs_carla.pt')
+    gen_trajectories(Path('data/route_00.xml'))
     pass

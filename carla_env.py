@@ -358,12 +358,12 @@ class CarlaEnv(gym.Env):
         # Put here for speed (get() busy polls queue).
         result = {key: val.get() for key, val in self._cameras.items()}
 
-        rgb = result['rgb']
-        rgb = np.transpose(rgb, (2, 0, 1))
-        rgb_left = result['rgb_left']
-        rgb_left = np.transpose(rgb_left, (2, 0, 1))
-        rgb_right = result['rgb_right']
-        rgb_right = np.transpose(rgb_right, (2, 0, 1))
+        self.rgb = result['rgb']
+        self.rgb_left = result['rgb_left']
+        self.rgb_right = result['rgb_right']
+        rgb = np.transpose(result['rgb'], (2, 0, 1))
+        rgb_left = np.transpose(result['rgb_left'], (2, 0, 1))
+        rgb_right = np.transpose(result['rgb_right'], (2, 0, 1))
 
         result = {key: val.get() for key, val in self._sensors.items()}
         gps = result['gnss']
@@ -417,6 +417,9 @@ class CarlaEnv(gym.Env):
             'y': transform.location.y,
             'yaw': transform.rotation.yaw,
             'speed': speed,
+            'velocity_x': velocity.x,
+            'velocity_y': velocity.y,
+            'velocity_z': velocity.z,
             'gps_x': gps[0],
             'gps_y': gps[1],
             'target_x': target[0],

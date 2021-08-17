@@ -48,12 +48,15 @@ def make_vec_envs(envs_params, device, ep_length, route_file):
 
 
 class EnvMonitor():
-    def __init__(self, env) -> None:
+    def __init__(self, env, output_path=None) -> None:
         self.env = env
         self.env_id = env.env_id
         self.ep_df = pd.DataFrame()
         self.ep_count = 0
-        self.output_path = Path("runs/env_info")
+        if not output_path:
+            self.output_path = Path("runs/env_info")
+        else:
+            self.output_path = output_path
         self.output_path.mkdir(parents=True, exist_ok=True)
         self.action_space = self.env.action_space
         self.observation_space = self.env.observation_space
