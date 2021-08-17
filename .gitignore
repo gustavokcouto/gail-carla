@@ -11,4 +11,4 @@ article_results
 screenlog.0
 carla_actor.pt
 experiment_results
-paper_plots/**/*[.csv,.eps,.png]
+paper_plots/**/*[.csv,.eps,.png,.txt]
