@@ -46,13 +46,23 @@ for i_layer, layer in enumerate(conv_layers):
 depth_shift = 0
 layer_shift = [0, 0]
 
-shape = '<shape aspect="variable" h="' + str(max_y) + '" w="' + str(max_x) + '" strokewidth="inherit">\n'
+shape = '<shape aspect="variable" h="' + str(1.2 * max_y) + '" w="' + str(1.2 * max_x) + '" strokewidth="inherit">\n'
+shape += '    <connections>'
+shape += '         <constraint x="0.5" y="0" perimeter="0" name="N"/>'
+shape += '         <constraint x="0.5" y="1" perimeter="0" name="S"/>'
+shape += '         <constraint x="0" y="0.5" perimeter="0" name="W"/>'
+shape += '         <constraint x="1" y="0.5" perimeter="0" name="E"/>'
+shape += '         <constraint x="0" y="0" perimeter="0" name="NW"/>'
+shape += '         <constraint x="1" y="0" perimeter="0" name="NE"/>'
+shape += '         <constraint x="1" y="1" perimeter="0" name="SE"/>'
+shape += '         <constraint x="0" y="1" perimeter="0" name="SW"/>'
+shape += '    </connections>'
 shape += '  <background>\n'
 shape += '  </background>\n'
 shape += '  <foreground>\n'
 for i_layer, layer in enumerate(conv_layers):
-    layer_shift[0] = depth_shift + (conv_layers[0]['width'] / 2 - layer['width'] / 2) * math.cos(perspective)
-    layer_shift[1] = conv_layers[0]['height'] / 2 - layer['height'] / 2 + (conv_layers[0]['width'] / 2 - layer['width'] / 2) * math.sin(perspective)
+    layer_shift[0] = 0.1 * max_x + depth_shift + (conv_layers[0]['width'] / 2 - layer['width'] / 2) * math.cos(perspective)
+    layer_shift[1] = 0.1 * max_y + conv_layers[0]['height'] / 2 - layer['height'] / 2 + (conv_layers[0]['width'] / 2 - layer['width'] / 2) * math.sin(perspective)
     shape += '    <fillstroke />\n'
     shape += '    <fillcolor color="#FFFFFF"/>\n'
     shape += '    <path>\n'
