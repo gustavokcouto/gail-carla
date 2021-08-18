@@ -8,8 +8,8 @@ if __name__ == "__main__":
     env = CarlaEnv(
         'localhost',
         2000,
-        800,
-        'data/route_01.xml',
+        2400,
+        'data/route_00.xml',
         eval=True
     )
     # network
