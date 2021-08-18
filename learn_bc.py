@@ -9,6 +9,7 @@ import tqdm
 from tensorboardX import SummaryWriter
 import os
 import shutil
+import torch.nn as nn
 
 
 def learn_bc(actor_critic, device, expert_loader, eval_loader):
@@ -18,8 +19,8 @@ def learn_bc(actor_critic, device, expert_loader, eval_loader):
     writer = SummaryWriter(log_save_path)
 
     optimizer = optim.Adam(actor_critic.parameters(), lr=3e-4, eps=1e-5)
-
-    episodes = 500
+    max_grad_norm = 0.5
+    episodes = 300
     ent_weight = 0
     i_epoch = 0
     min_eval_loss = np.inf
@@ -41,6 +42,7 @@ def learn_bc(actor_critic, device, expert_loader, eval_loader):
             i_batch += 1
             optimizer.zero_grad()
             loss.backward()
+            nn.utils.clip_grad_norm_(actor_critic.parameters(), max_grad_norm)
             optimizer.step()
 
         total_eval_loss = 0
@@ -68,6 +70,7 @@ def learn_bc(actor_critic, device, expert_loader, eval_loader):
 
         if min_eval_loss > eval_loss:
             torch.save(actor_critic.state_dict(), 'carla_actor_bc.pt')
+            min_eval_loss = eval_loss
 
 
 if __name__ == '__main__':
@@ -84,19 +87,19 @@ if __name__ == '__main__':
     device = torch.device('cuda:0')
 
     actor_critic.to(device)
-    route = 'route_01'
+    route = 'route_00'
     file_name = 'gail_experts/{}/trajs_carla.pt'.format(route)
 
     gail_train_loader = torch.utils.data.DataLoader(
         ExpertDataset(
-        file_name, num_trajectories=10, subsample_frequency=1),
+        file_name, num_trajectories=7, subsample_frequency=1),
         batch_size=128,
         shuffle=True,
         drop_last=True)
     
     gail_val_loader = torch.utils.data.DataLoader(
         ExpertDataset(
-        file_name, num_trajectories=2, subsample_frequency=1),
+        file_name, num_trajectories=3, start=7, subsample_frequency=1),
         batch_size=128,
         shuffle=True,
         drop_last=True)
