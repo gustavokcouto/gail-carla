@@ -253,6 +253,9 @@ class CarlaEnv(gym.Env):
             self._world, self._player, 256, 144, 90, 1.2, -0.25, 1.3, 0.0, -45.0)
         self._cameras['rgb_right'] = Camera(
             self._world, self._player, 256, 144, 90, 1.2, 0.25, 1.3, 0.0, 45.0)
+        if self.env_id == 'expert':
+            self._cameras['topdown'] = Camera(
+                self._world, self._player, 512, 512, 50, 0, 0, 100, -90, 0)
 
         self._sensors['gnss'] = GNSS(self._world, self._player)
         self._sensors['imu'] = IMU(self._world, self._player)
@@ -361,6 +364,8 @@ class CarlaEnv(gym.Env):
         self.rgb = result['rgb']
         self.rgb_left = result['rgb_left']
         self.rgb_right = result['rgb_right']
+        if self.env_id == 'expert':
+            self.topdown = result['topdown']
         rgb = np.transpose(result['rgb'], (2, 0, 1))
         rgb_left = np.transpose(result['rgb_left'], (2, 0, 1))
         rgb_right = np.transpose(result['rgb_right'], (2, 0, 1))
