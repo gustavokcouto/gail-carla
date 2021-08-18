@@ -27,10 +27,7 @@ def gen_trajectories(route_file='', save_obs=True):
     env = CarlaEnv(host, port, ep_len, route_file, train=False, eval=True, env_id='expert')
     
     expert_file_dir = Path('gail_experts') / route_file.stem
-    expert_file_dir.mkdir(parents=True, exist_ok=True)
-    (expert_file_dir / 'rgb').mkdir(parents=True, exist_ok=True)
-    (expert_file_dir / 'rgb_left').mkdir(parents=True, exist_ok=True)
-    (expert_file_dir / 'rgb_right').mkdir(parents=True, exist_ok=True)
+    expert_file_dir.mkdir(parents=True)
 
     env = EnvMonitor(env, output_path=expert_file_dir)
 
@@ -47,6 +44,11 @@ def gen_trajectories(route_file='', save_obs=True):
     lens = []
     max_len = 0
     for episode in tqdm.tqdm(range(n_episodes)):
+        episode_dir = expert_file_dir / ('episode_%02d' % episode)
+        (episode_dir / 'rgb').mkdir(parents=True)
+        (episode_dir / 'rgb_left').mkdir(parents=True)
+        (episode_dir / 'rgb_right').mkdir(parents=True)
+        (episode_dir / 'topdown').mkdir(parents=True)
         states_ep = []
         metrics_ep = []
         actions_ep = []
@@ -70,9 +72,10 @@ def gen_trajectories(route_file='', save_obs=True):
             if save_obs:
                 states_ep.append(obs)
             actions_ep.append(action)
-            Image.fromarray(env.env.rgb_left).save(expert_file_dir / 'rgb_left' / ('%04d.png' % i_step))
-            Image.fromarray(env.env.rgb).save(expert_file_dir / 'rgb' / ('%04d.png' % i_step))
-            Image.fromarray(env.env.rgb_right).save(expert_file_dir / 'rgb_right' / ('%04d.png' % i_step))
+            Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
+            Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
+            Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
+            Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
 
             obs, step_metrics, reward, _, _ = env.step(action)
             i_step += 1
@@ -83,9 +86,10 @@ def gen_trajectories(route_file='', save_obs=True):
         if save_obs:
             states_ep.append(obs)
 
-        Image.fromarray(env.env.rgb_left).save(expert_file_dir / 'rgb_left' / ('%04d.png' % i_step))
-        Image.fromarray(env.env.rgb).save(expert_file_dir / 'rgb' / ('%04d.png' % i_step))
-        Image.fromarray(env.env.rgb_right).save(expert_file_dir / 'rgb_right' / ('%04d.png' % i_step))
+        Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
+        Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
+        Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
+        Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
 
         ep_len = len(actions_ep)
         if ep_len > max_len:
