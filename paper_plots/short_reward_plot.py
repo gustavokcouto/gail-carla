@@ -78,6 +78,11 @@ for results_files in results_dataset:
     plt.plot(results_id, results_mean, label=results_files[6])
     plt.fill_between(results_id, results_mean + results_std, results_mean - results_std, alpha=0.5)
 
+results_mean.fill(78.3)
+plt.plot(results_id, results_mean, label='bc')
+results_std.fill(5.1)
+plt.fill_between(results_id, results_mean + results_std, results_mean - results_std, alpha=0.5)
+
 plt.xlabel(r'environment interactions ($ \times 10^5$)')
 plt.ylabel('Reward')
 plt.legend(loc='lower right', shadow=True, fontsize='x-large')
