@@ -18,7 +18,7 @@ def learn_bc(actor_critic, device, expert_loader, eval_loader):
         shutil.rmtree(log_save_path)
     writer = SummaryWriter(log_save_path)
 
-    optimizer = optim.Adam(actor_critic.parameters(), lr=3e-4, eps=1e-5)
+    optimizer = optim.Adam(actor_critic.parameters(), lr=3e-4)
     max_grad_norm = 0.5
     episodes = 300
     ent_weight = 0
@@ -42,7 +42,6 @@ def learn_bc(actor_critic, device, expert_loader, eval_loader):
             i_batch += 1
             optimizer.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(actor_critic.parameters(), max_grad_norm)
             optimizer.step()
 
         total_eval_loss = 0
