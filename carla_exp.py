@@ -26,7 +26,7 @@ def gen_trajectories(route_file='', save_obs=True):
     port = 2000
     env = CarlaEnv(host, port, ep_len, route_file, train=False, eval=True, env_id='expert')
     
-    expert_file_dir = Path('gail_experts') / route_file.stem
+    expert_file_dir = Path('gail_experts') / (str(route_file.stem) + '_plot2')
     expert_file_dir.mkdir(parents=True)
 
     env = EnvMonitor(env, output_path=expert_file_dir)

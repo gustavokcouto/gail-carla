@@ -168,7 +168,7 @@ def train(params):
         'cuda:' + str(params['cuda']) if torch.cuda.is_available() else 'cpu')
 
     file_name = os.path.join(
-        params['gail_experts_dir'], params['trajectory'], "trajs_{}.pt".format(
+        params['gail_experts_dir'], params['trajectory'] + '_no_target', "trajs_{}.pt".format(
             params['env_name'].split('-')[0].lower()))
 
     gail_train_loader = torch.utils.data.DataLoader(

@@ -188,7 +188,7 @@ class CarlaEnv(gym.Env):
                                             shape=(9, 144, 256), dtype=np.uint8)
 
         self.metrics_space = spaces.Box(low=-100, high=100,
-                                        shape=(3 + len(self.road_options),), dtype=np.float32)
+                                        shape=(1,), dtype=np.float32)
 
         self.trajectory = parse_routes_file(route_file)
 
@@ -255,7 +255,7 @@ class CarlaEnv(gym.Env):
             self._world, self._player, 256, 144, 90, 1.2, 0.25, 1.3, 0.0, 45.0)
         if self.env_id == 'expert':
             self._cameras['topdown'] = Camera(
-                self._world, self._player, 512, 512, 50, 0, 0, 100, -90, 0)
+                self._world, self._player, 256, 144, 90, 0, 0, 200, -90, 90)
 
         self._sensors['gnss'] = GNSS(self._world, self._player)
         self._sensors['imu'] = IMU(self._world, self._player)
@@ -396,7 +396,7 @@ class CarlaEnv(gym.Env):
 
         road_option_metrics = [
             1.0 if road_option == _road_option else 0.0 for _road_option in self.road_options]
-        metrics = np.array([target[0], target[1], speed, *road_option_metrics])
+        metrics = np.array([speed])
         obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
 
         self.cur_length += 1
