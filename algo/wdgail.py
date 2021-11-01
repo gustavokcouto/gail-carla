@@ -1,16 +1,17 @@
 import itertools
 
 import numpy as np
+from pathlib import Path
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.data
 from torch import autograd
 
-from common.running_mean_std import RunningMeanStd
-from tools.utils import init
 from tools.model import Flatten
 import torch.optim as optim
+from PIL import Image
+
+from common.running_mean_std import RunningMeanStd
 
 
 class Discriminator(nn.Module):
@@ -298,8 +299,9 @@ class Discriminator(nn.Module):
 class ExpertDataset(torch.utils.data.Dataset):
     def __init__(self, file_name, num_trajectories=4, subsample_frequency=20, start=0):
         all_trajectories = torch.load(file_name)
+        self.dataset_dir = Path(file_name).parent
 
-        perm = torch.randperm(all_trajectories['states'].size(0))
+        perm = torch.randperm(all_trajectories['actions'].size(0))
         # idx = perm[:num_trajectories]
         idx = np.arange(num_trajectories) + start
 
@@ -346,6 +348,13 @@ class ExpertDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, j):
         traj_idx, i = self.get_idx[j]
-
-        return self.trajectories['states'][traj_idx][i], self.trajectories[
+        
+        rgb = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb/{:0>4d}.png'.format(traj_idx, i))
+        rgb_left = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb_left/{:0>4d}.png'.format(traj_idx, i))
+        rgb_right = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb_right/{:0>4d}.png'.format(traj_idx, i))
+        rgb = np.transpose(rgb, (2, 0, 1))
+        rgb_left = np.transpose(rgb_left, (2, 0, 1))
+        rgb_right = np.transpose(rgb_right, (2, 0, 1))
+        obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
+        return torch.from_numpy(obs).float(), self.trajectories[
             'metrics'][traj_idx][i], self.trajectories['actions'][traj_idx][i]
