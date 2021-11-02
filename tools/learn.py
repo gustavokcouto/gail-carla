@@ -124,6 +124,8 @@ def gailLearning_mujoco_origin(run_params,
             next_value = actor_critic.get_value(
                 rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
 
+        actor_critic.cpu()
+        discriminator.to(device)
         # gail
         disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
             gail_val_loader, rollouts)
@@ -193,7 +195,9 @@ def gailLearning_mujoco_origin(run_params,
         # compute returns
         rollouts.compute_returns(
             next_value, run_params['gamma'], run_params['gae_lambda'])
-
+    
+        discriminator.cpu()
+        actor_critic.to(device)
         # training PPO policy
         if run_params['bcgail']:
             value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
