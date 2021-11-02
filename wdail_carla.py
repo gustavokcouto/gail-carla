@@ -131,7 +131,7 @@ def read_params():
     #     'use_activation': True
     # }
     params = {}
-    config_file = open('params_long.json')
+    config_file = open('params_short.json')
     config = json.load(config_file)
     params.update(config)
     return params

@@ -19,7 +19,7 @@
         {"host": "192.168.0.5", "port": 2006},
         {"host": "192.168.0.5", "port": 2008}
     ],
-    "env_eval_params": {"host": "localhost", "port": 2000},
+    "env_eval_params": {"host": "192.168.0.4", "port": 2010},
     "num_steps": 2000,
     "lr": 1.0e-4,
     "ppo_epoch": 4,
@@ -46,7 +46,7 @@
     "gail_ct_lambda": 0.0,
     "gail_use_dropout": false,
     "gail_thre": 5,
-    "gail_pre_epoch": 20,
+    "gail_pre_epoch": 4,
     "gail_epoch": 4,
     "gail_max_grad_norm": 0.5,
     "num_trajs": 10,
@@ -56,6 +56,6 @@
     "eval_interval": 3,
     "bcgail": 1,
     "decay": 1.0,
-    "gailgamma": 0.125,
+    "gailgamma": 0.0,
     "use_activation": true
 }
