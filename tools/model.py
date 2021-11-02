@@ -52,32 +52,16 @@ class Policy(nn.Module):
 
 
 class CNNBase(nn.Module):
-    def __init__(self, obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent, hidden_size=512):
+    def __init__(self, obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent, hidden_size=512, resnet=True):
         super(CNNBase, self).__init__()
-
-        C, H, W = obs_shape
-
-        self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 64, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            Flatten()
-        )
-
-        for i in range(4):
-            H = (H - 4)//2 + 1
-            W = (W - 4)//2 + 1
-        # Get image dim
-        img_dim = 256*H*W
-
+        self.resnet = resnet
+        if self.resnet:
+            self.main = WaveNetModel(obs_shape)
+        else:
+            self.main = AlexModel(obs_shape)
 
         self.trunk = nn.Sequential(
-            nn.Linear(metrics_space.shape[0] + img_dim, hidden_size),
+            nn.Linear(metrics_space.shape[0] + self.main.output_dim, hidden_size),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_size, 1 + num_outputs)
         )
@@ -112,3 +96,90 @@ class CNNBase(nn.Module):
         logstd = logstd + zeros
         return critic, output, logstd
 
+
+class AlexModel(nn.Module):
+    def __init__(self, obs_shape):
+        C, H, W = obs_shape
+
+        self.conv_net = nn.Sequential(
+            nn.Conv2d(C, 32, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 64, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 128, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 256, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            Flatten()
+        )
+
+        for _ in range(4):
+            H = (H - 4)//2 + 1
+            W = (W - 4)//2 + 1
+        # Get image dim
+        self.output_dim = 256*H*W
+
+    def forward(self, obs):
+        return self.conv_net(obs)
+
+
+class WaveNetModel(nn.Module):
+    def __init__(self, obs_shape, blocks=3):
+
+        super(WaveNetModel, self).__init__()
+
+        input_channels, input_height, input_width = obs_shape
+        self.blocks = blocks
+
+        self.gate_convs = nn.ModuleList()
+        self.residual_convs = nn.ModuleList()
+        self.skip_convs = nn.ModuleList()
+
+        layer_channels = 16
+        self.activation_layer = nn.LeakyReLU(0.2)
+        self.flatten_layer = Flatten()
+        self.start_conv = nn.Conv2d(input_channels, layer_channels, 4, stride=2)
+        for _ in range(2):
+            input_height = (input_height - 4)//2 + 1
+            input_width = (input_width - 4)//2 + 1
+
+        self.output_dim = layer_channels * input_height * input_width
+        for i_block in range(self.blocks):
+            self.gate_convs.append(nn.Conv2d(layer_channels, layer_channels, 4, padding='same'))
+            if i_block < blocks - 1:
+                # 1x1 convolution for residual connection
+                self.residual_convs.append(nn.Conv2d(layer_channels, layer_channels, 4, padding='same'))
+
+            # 1x1 convolution for skip connection
+            self.skip_convs.append(nn.Conv2d(layer_channels, layer_channels, 4, stride=2))
+
+        self.train()
+
+    def forward(self, obs):
+        # WaveNet layers
+        input = self.start_conv(obs)
+        input = self.activation_layer(input)
+        skip = 0
+        for i_block in range(self.blocks):
+
+            #            |----------------------------------------|     *residual*
+            #            |                                        |
+            # -> dilate -|----|-- conv -- tanh --* ----|-- conv -- + -->	*input*
+            #                                         conv
+            #                                          |
+            # ---------------------------------------> + ------------->	*skip*
+            residual = input.clone()
+            input = self.gate_convs[i_block](input)
+            input = self.activation_layer(input)
+
+            # parametrized skip connection
+            skip_output = self.skip_convs[i_block](input.clone())
+            skip_output = self.flatten_layer(skip_output)
+            skip_output = self.activation_layer(skip_output)
+            skip = skip_output + skip
+
+            if i_block < self.blocks - 1:
+                residual_output = self.residual_convs[i_block](input.clone())
+                input = residual_output + residual
+
+        return skip
