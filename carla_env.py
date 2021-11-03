@@ -8,8 +8,6 @@ import time
 
 import carla
 
-from agents.navigation.local_planner import RoadOption
-
 from PIL import Image, ImageDraw
 from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
@@ -175,7 +173,6 @@ class CarlaEnv(gym.Env):
 
         self._tick = 0
         self._player = None
-        self.road_options = list(RoadOption)
         # vehicle, sensor
         self._actor_dict = collections.defaultdict(list)
         self._cameras = dict()
@@ -188,7 +185,7 @@ class CarlaEnv(gym.Env):
                                             shape=(9, 144, 256), dtype=np.uint8)
 
         self.metrics_space = spaces.Box(low=-100, high=100,
-                                        shape=(3 + len(self.road_options),), dtype=np.float32)
+                                        shape=(4,), dtype=np.float32)
 
         self.trajectory = parse_routes_file(route_file)
 
@@ -390,13 +387,10 @@ class CarlaEnv(gym.Env):
         self.debug.dot(origin, origin, (0, 0, 255))
         self.debug.show()
 
-        target *= 1000
         velocity = self._player.get_velocity()
         speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
 
-        road_option_metrics = [
-            1.0 if road_option == _road_option else 0.0 for _road_option in self.road_options]
-        metrics = np.array([target[0], target[1], speed, *road_option_metrics])
+        metrics = np.array([target[0], target[1], speed, road_option.value])
         obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
 
         self.cur_length += 1
