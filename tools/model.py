@@ -160,5 +160,5 @@ class ProcessAction(nn.Module):
         super(ProcessAction, self).__init__()
         self.output_dim = action_shape
 
-    def forward(self, actions):
-        return actions
+    def forward(self, action):
+        return action
