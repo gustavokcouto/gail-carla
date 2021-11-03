@@ -112,3 +112,69 @@ class CNNBase(nn.Module):
         logstd = logstd + zeros
         return critic, output, logstd
 
+
+
+class ProcessObsFeatures(nn.Module):
+    def __init__(self, obs_shape, bias=True):
+        super(ProcessObsFeatures, self).__init__()
+        C, H, W = obs_shape
+
+        self.main = nn.Sequential(
+            nn.Conv2d(C, 32, 4, stride=2, bias=bias),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 64, 4, stride=2, bias=bias),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 128, 4, stride=2, bias=bias),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 256, 4, stride=2, bias=bias),
+            nn.LeakyReLU(0.2),
+            Flatten()
+        )
+
+        for _ in range(4):
+            H = (H - 4)//2 + 1
+            W = (W - 4)//2 + 1
+
+        # Get image dim
+        self.output_dim = 256*H*W
+
+    def forward(self, obs):
+        # scale observation
+        # obs = obs / 255
+        
+        return self.main(obs)
+
+
+class ProcessMetrics(nn.Module):
+    def __init__(self, metrics_shape):
+        super(ProcessMetrics, self).__init__()
+        road_option_embedding_dimension = 4
+        max_road_options = 10
+        self.road_option_embedding = nn.Embedding(max_road_options, road_option_embedding_dimension)
+        # self.output_dim = metrics_shape - 1 + road_option_embedding_dimension
+        self.output_dim = 1
+
+    def forward(self, metrics):
+        # metrics = [target[0], target[1], speed, int(road_option)]
+
+        # scale target by 1000
+        # target_features = 1000 * metrics[:, 0:2]
+
+        # scale speed by 0.1
+        speed_features = 0.1 * metrics[:, 2]
+
+        # scale speed by 0.1
+        # road_option_features = self.road_option_embedding(metrics[:, 3].long())
+
+        # metrics_features = torch.cat([target_features, speed_features.unsqueeze(1), road_option_features], dim=1)
+
+        return speed_features.unsqueeze(1)
+
+
+class ProcessAction(nn.Module):
+    def __init__(self, action_shape):
+        super(ProcessAction, self).__init__()
+        self.output_dim = action_shape
+
+    def forward(self, actions):
+        return actions

@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.utils.data
 from torch import autograd
 
-from tools.model import Flatten
+from tools.model import ProcessObsFeatures
 import torch.optim as optim
 from PIL import Image
 
@@ -20,29 +20,15 @@ class Discriminator(nn.Module):
         self.device = device
         C, H, W = state_shape
 
-        self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 64, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 4, stride=2, bias=False),
-            nn.LeakyReLU(0.2),
-            Flatten(),
-        ).to(device)
+        self.obs_processor = ProcessObsFeatures(state_shape, bias=False)
 
-        for i in range(4):
-            H = (H - 4)//2 + 1
-            W = (W - 4)//2 + 1
-        # Get image dim
-        img_dim = 256*H*W
         self.trunk = nn.Sequential(
-                nn.Linear(
-                    img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
+            nn.Linear(
+                self.obs_processor.output_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, 1))
-        
+            nn.Linear(hidden_dim, 1)
+        )
+
         self.to(device)
         self.train()
 
@@ -81,7 +67,7 @@ class Discriminator(nn.Module):
             (1 - alpha_action) * policy_action
         mixup_action.requires_grad = True
 
-        mixup_state_features = self.main(mixup_state)
+        mixup_state_features = self.obs_processor(mixup_state)
 
         mixup_data = torch.cat(
             [mixup_state_features, mixup_metrics, mixup_action], dim=1)
@@ -126,7 +112,7 @@ class Discriminator(nn.Module):
             policy_metrics = policy_metrics.to(self.device)
             policy_action = policy_action.to(self.device)
 
-            policy_state_features = self.main(policy_state)
+            policy_state_features = self.obs_processor(policy_state)
             policy_d = self.trunk(
                 torch.cat([policy_state_features,  policy_metrics, policy_action], dim=1))
             policy_reward += policy_d.sum().item()
@@ -137,7 +123,7 @@ class Discriminator(nn.Module):
             expert_metrics = expert_metrics.to(self.device)
             expert_action = expert_action.to(self.device)
 
-            expert_state_features = self.main(expert_state)
+            expert_state_features = self.obs_processor(expert_state)
 
             expert_d = self.trunk(
                 torch.cat([expert_state_features, expert_metrics, expert_action], dim=1))
@@ -192,7 +178,7 @@ class Discriminator(nn.Module):
                 policy_metrics = policy_metrics.to(self.device)
                 policy_action = policy_action.to(self.device)
 
-                policy_state_features = self.main(policy_state)
+                policy_state_features = self.obs_processor(policy_state)
 
                 policy_d = self.trunk(
                     torch.cat([policy_state_features, policy_metrics, policy_action], dim=1))
@@ -202,7 +188,7 @@ class Discriminator(nn.Module):
                 expert_metrics = expert_metrics.to(self.device)
                 expert_action = expert_action.to(self.device)
 
-                expert_state_features = self.main(expert_state)
+                expert_state_features = self.obs_processor(expert_state)
 
                 expert_d = self.trunk(
                     torch.cat([expert_state_features, expert_metrics, expert_action], dim=1))
@@ -223,7 +209,7 @@ class Discriminator(nn.Module):
         with torch.no_grad():
             self.eval()
 
-            state_features = self.main(state)
+            state_features = self.obs_processor(state)
 
             d = self.trunk(
                 torch.cat([state_features, metrics, action], dim=1))
@@ -294,9 +280,12 @@ class ExpertDataset(torch.utils.data.Dataset):
     def __getitem__(self, j):
         traj_idx, i = self.get_idx[j]
 
-        rgb = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb/{:0>4d}.png'.format(traj_idx, i))
-        rgb_left = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb_left/{:0>4d}.png'.format(traj_idx, i))
-        rgb_right = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb_right/{:0>4d}.png'.format(traj_idx, i))
+        rgb = Image.open(self.dataset_dir /
+                         'episode_{:0>2d}/rgb/{:0>4d}.png'.format(traj_idx, i))
+        rgb_left = Image.open(
+            self.dataset_dir / 'episode_{:0>2d}/rgb_left/{:0>4d}.png'.format(traj_idx, i))
+        rgb_right = Image.open(
+            self.dataset_dir / 'episode_{:0>2d}/rgb_right/{:0>4d}.png'.format(traj_idx, i))
         rgb = np.transpose(rgb, (2, 0, 1))
         rgb_left = np.transpose(rgb_left, (2, 0, 1))
         rgb_right = np.transpose(rgb_right, (2, 0, 1))
