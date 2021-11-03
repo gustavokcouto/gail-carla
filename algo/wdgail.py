@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.utils.data
 from torch import autograd
 
-from tools.model import ProcessObsFeatures
+from tools.model import ProcessObsFeatures, ProcessMetrics
 import torch.optim as optim
 from PIL import Image
 
@@ -21,10 +21,10 @@ class Discriminator(nn.Module):
         C, H, W = state_shape
 
         self.obs_processor = ProcessObsFeatures(state_shape, bias=False)
-
+        self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         self.trunk = nn.Sequential(
             nn.Linear(
-                self.obs_processor.output_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
+                self.obs_processor.output_dim + self.metrics_processor.output_dim + action_space.shape[0], hidden_dim),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_dim, 1)
         )
@@ -68,9 +68,10 @@ class Discriminator(nn.Module):
         mixup_action.requires_grad = True
 
         mixup_state_features = self.obs_processor(mixup_state)
+        mixup_metrics_features = self.metrics_processor(mixup_metrics)
 
         mixup_data = torch.cat(
-            [mixup_state_features, mixup_metrics, mixup_action], dim=1)
+            [mixup_state_features, mixup_metrics_features, mixup_action], dim=1)
 
         disc = self.trunk(mixup_data)
         ones = torch.ones(disc.size()).to(disc.device)
@@ -113,8 +114,10 @@ class Discriminator(nn.Module):
             policy_action = policy_action.to(self.device)
 
             policy_state_features = self.obs_processor(policy_state)
+            policy_metrics_features = self.metrics_processor(policy_metrics)
+
             policy_d = self.trunk(
-                torch.cat([policy_state_features,  policy_metrics, policy_action], dim=1))
+                torch.cat([policy_state_features,  policy_metrics_features, policy_action], dim=1))
             policy_reward += policy_d.sum().item()
 
             expert_state, expert_metrics, expert_action = expert_batch
@@ -124,9 +127,10 @@ class Discriminator(nn.Module):
             expert_action = expert_action.to(self.device)
 
             expert_state_features = self.obs_processor(expert_state)
+            expert_metrics_features = self.metrics_processor(expert_metrics)
 
             expert_d = self.trunk(
-                torch.cat([expert_state_features, expert_metrics, expert_action], dim=1))
+                torch.cat([expert_state_features, expert_metrics_features, expert_action], dim=1))
             expert_reward += expert_d.sum().item()
 
             # expert_loss = F.binary_cross_entropy_with_logits(
@@ -179,9 +183,10 @@ class Discriminator(nn.Module):
                 policy_action = policy_action.to(self.device)
 
                 policy_state_features = self.obs_processor(policy_state)
+                policy_metrics_features = self.metrics_processor(policy_metrics)
 
                 policy_d = self.trunk(
-                    torch.cat([policy_state_features, policy_metrics, policy_action], dim=1))
+                    torch.cat([policy_state_features, policy_metrics_features, policy_action], dim=1))
 
                 expert_state, expert_metrics, expert_action = expert_batch
                 expert_state = expert_state.to(self.device)
@@ -189,9 +194,10 @@ class Discriminator(nn.Module):
                 expert_action = expert_action.to(self.device)
 
                 expert_state_features = self.obs_processor(expert_state)
+                expert_metrics_features = self.metrics_processor(expert_metrics)
 
                 expert_d = self.trunk(
-                    torch.cat([expert_state_features, expert_metrics, expert_action], dim=1))
+                    torch.cat([expert_state_features, expert_metrics_features, expert_action], dim=1))
                 expert_loss = torch.tanh(expert_d)
                 policy_loss = torch.tanh(policy_d)
                 expert_reward += expert_loss.sum().item()
@@ -210,9 +216,10 @@ class Discriminator(nn.Module):
             self.eval()
 
             state_features = self.obs_processor(state)
+            metrics_features = self.metrics_processor(metrics)
 
             d = self.trunk(
-                torch.cat([state_features, metrics, action], dim=1))
+                torch.cat([state_features, metrics_features, action], dim=1))
             s = torch.sigmoid(d)
             reward = -(1 - s).log()
             reward = reward.cpu()

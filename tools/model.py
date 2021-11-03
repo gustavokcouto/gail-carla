@@ -56,9 +56,10 @@ class CNNBase(nn.Module):
         super(CNNBase, self).__init__()
 
         self.obs_processor = ProcessObsFeatures(obs_shape, bias=True)
-
+        self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
+        
         self.trunk = nn.Sequential(
-            nn.Linear(self.obs_processor.output_dim + metrics_space.shape[0], hidden_size),
+            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_size, 1 + num_outputs)
         )
@@ -81,8 +82,10 @@ class CNNBase(nn.Module):
                 break
 
     def forward(self, obs, metrics):
-        x = self.obs_processor(obs)
-        nn_output = self.trunk(torch.cat([x, metrics], dim=1))
+        obs_features = self.obs_processor(obs)
+        metrics_features = self.metrics_processor(metrics)
+
+        nn_output = self.trunk(torch.cat([obs_features, metrics_features], dim=1))
         critic = nn_output[...,0].unsqueeze(dim=1)
         output = nn_output[...,1:]
         if self.activation:
@@ -133,7 +136,7 @@ class ProcessMetrics(nn.Module):
         max_road_options = 10
         self.road_option_embedding = nn.Embedding(max_road_options, road_option_embedding_dimension)
         # self.output_dim = metrics_shape - 1 + road_option_embedding_dimension
-        self.output_dim = 1
+        self.output_dim = metrics_shape
 
     def forward(self, metrics):
         # metrics = [target[0], target[1], speed, int(road_option)]
@@ -142,15 +145,15 @@ class ProcessMetrics(nn.Module):
         # target_features = 1000 * metrics[:, 0:2]
 
         # scale speed by 0.1
-        speed_features = 0.1 * metrics[:, 2]
+        # speed_features = 0.1 * metrics[:, 2]
 
         # scale speed by 0.1
         # road_option_features = self.road_option_embedding(metrics[:, 3].long())
 
         # metrics_features = torch.cat([target_features, speed_features.unsqueeze(1), road_option_features], dim=1)
 
-        return speed_features.unsqueeze(1)
-
+        # return speed_features.unsqueeze(1)
+        return metrics
 
 class ProcessAction(nn.Module):
     def __init__(self, action_shape):
