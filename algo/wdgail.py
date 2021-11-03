@@ -15,72 +15,42 @@ from common.running_mean_std import RunningMeanStd
 
 
 class Discriminator(nn.Module):
-    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, ct_lambda, use_dropout, max_grad_norm=None):
+    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None):
         super(Discriminator, self).__init__()
         self.device = device
         C, H, W = state_shape
 
-        if use_dropout:
-            self.main = nn.Sequential(
-                nn.Conv2d(C, 32, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(0.5),
-                nn.Conv2d(32, 64, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(0.5),
-                nn.Conv2d(64, 128, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(0.5),
-                nn.Conv2d(128, 256, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(0.5),
-                Flatten(),
-            ).to(device)
-        else:
-            self.main = nn.Sequential(
-                nn.Conv2d(C, 32, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                nn.Conv2d(32, 64, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                nn.Conv2d(64, 128, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                nn.Conv2d(128, 256, 4, stride=2, bias=False),
-                nn.LeakyReLU(0.2),
-                Flatten(),
-            ).to(device)
+        self.main = nn.Sequential(
+            nn.Conv2d(C, 32, 4, stride=2, bias=False),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32, 64, 4, stride=2, bias=False),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 128, 4, stride=2, bias=False),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 256, 4, stride=2, bias=False),
+            nn.LeakyReLU(0.2),
+            Flatten(),
+        ).to(device)
 
         for i in range(4):
             H = (H - 4)//2 + 1
             W = (W - 4)//2 + 1
         # Get image dim
         img_dim = 256*H*W
-
-        if use_dropout:
-            self.trunk = nn.Sequential(
+        self.trunk = nn.Sequential(
                 nn.Linear(
                     img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
-                nn.LeakyReLU(0.2),
-                nn.Dropout(0.5)).to(device)
-        else:
-            self.trunk = nn.Sequential(
-                nn.Linear(
-                    img_dim + metrics_space.shape[0] + action_space.shape[0], hidden_dim),
-                nn.LeakyReLU(0.2)).to(device)
-
-        self.last_layer = nn.Sequential(nn.Linear(hidden_dim, 1)).to(device)
-
-        self.main.train()
-        self.trunk.train()
-        self.last_layer.train()
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_dim, 1))
+        
+        self.to(device)
+        self.train()
 
         self.max_grad_norm = max_grad_norm
-        self.optimizer = optim.Adam(list(self.main.parameters())
-                                    + list(self.trunk.parameters())
-                                    + list(self.last_layer.parameters()),
+        self.optimizer = optim.Adam(self.parameters(),
                                     lr=lr, betas=betas, eps=eps)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
-        self.ct_lambda = ct_lambda
 
     def compute_grad_pen(self,
                          expert_state,
@@ -116,8 +86,7 @@ class Discriminator(nn.Module):
         mixup_data = torch.cat(
             [mixup_state_features, mixup_metrics, mixup_action], dim=1)
 
-        disc_t = self.trunk(mixup_data)
-        disc = self.last_layer(disc_t)
+        disc = self.trunk(mixup_data)
         ones = torch.ones(disc.size()).to(disc.device)
 
         grad = autograd.grad(
@@ -135,25 +104,6 @@ class Discriminator(nn.Module):
         grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
 
-    def compute_consistency_term(self,
-                                 expert_state,
-                                 expert_metrics,
-                                 expert_action,
-                                 m_tag=0):
-        exp_state = self.main(expert_state)
-        disc_t1 = self.trunk(
-            torch.cat([exp_state, expert_metrics, expert_action], dim=1))
-        disc1 = self.last_layer(disc_t1)
-
-        exp_state = self.main(expert_state)
-        disc_t2 = self.trunk(
-            torch.cat([exp_state, expert_metrics, expert_action], dim=1))
-        disc2 = self.last_layer(disc_t2)
-
-        consistency_term = (disc1 - disc2).norm(2, dim=1) + 0.1 * \
-            (disc_t1 - disc_t2).norm(2, dim=1) - m_tag
-        return consistency_term.mean()
-
     def update(self, expert_loader, rollouts):
         self.train()
 
@@ -165,7 +115,6 @@ class Discriminator(nn.Module):
         policy_ac_loss = 0
         g_loss = 0.0
         gp = 0.0
-        ct = 0.0
         n = 0
         policy_reward = 0
         expert_reward = 0
@@ -177,10 +126,9 @@ class Discriminator(nn.Module):
             policy_metrics = policy_metrics.to(self.device)
             policy_action = policy_action.to(self.device)
 
-            pol_state = self.main(policy_state)
-            policy_dt = self.trunk(
-                torch.cat([pol_state, policy_metrics, policy_action], dim=1))
-            policy_d = self.last_layer(policy_dt)
+            policy_state_features = self.main(policy_state)
+            policy_d = self.trunk(
+                torch.cat([policy_state_features,  policy_metrics, policy_action], dim=1))
             policy_reward += policy_d.sum().item()
 
             expert_state, expert_metrics, expert_action = expert_batch
@@ -188,10 +136,11 @@ class Discriminator(nn.Module):
             expert_state = expert_state.to(self.device)
             expert_metrics = expert_metrics.to(self.device)
             expert_action = expert_action.to(self.device)
-            exp_state = self.main(expert_state)
-            expert_dt = self.trunk(
-                torch.cat([exp_state, expert_metrics, expert_action], dim=1))
-            expert_d = self.last_layer(expert_dt)
+
+            expert_state_features = self.main(expert_state)
+
+            expert_d = self.trunk(
+                torch.cat([expert_state_features, expert_metrics, expert_action], dim=1))
             expert_reward += expert_d.sum().item()
 
             # expert_loss = F.binary_cross_entropy_with_logits(
@@ -210,27 +159,21 @@ class Discriminator(nn.Module):
             wd = expert_loss - policy_loss
             grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
                                              policy_state, policy_metrics, policy_action)
-            cons_term = self.compute_consistency_term(expert_state, expert_metrics, expert_action)
 
             # loss += (gail_loss + grad_pen).item()
-            loss += (-wd + grad_pen + self.ct_lambda * cons_term).item() * n_samples
+            loss += (-wd + grad_pen).item() * n_samples
             g_loss += (wd).item() * n_samples
             gp += (grad_pen).item() * n_samples
-            ct += (cons_term).item() * n_samples
             n += n_samples
 
             self.optimizer.zero_grad()
             # (gail_loss + grad_pen).backward()
-            (-wd + grad_pen + self.ct_lambda * cons_term).backward()
+            (-wd + grad_pen).backward()
             nn.utils.clip_grad_norm_(
-                self.main.parameters(), self.max_grad_norm)
-            nn.utils.clip_grad_norm_(
-                self.trunk.parameters(), self.max_grad_norm)
-            nn.utils.clip_grad_norm_(
-                self.last_layer.parameters(), self.max_grad_norm)
+                self.parameters(), self.max_grad_norm)
             self.optimizer.step()
 
-        return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, ct/n, expert_ac_loss / n, policy_ac_loss / n
+        return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, expert_ac_loss / n, policy_ac_loss / n
 
     def compute_loss(self, expert_loader, rollouts, batch_size=None):
         with torch.no_grad():
@@ -249,19 +192,20 @@ class Discriminator(nn.Module):
                 policy_metrics = policy_metrics.to(self.device)
                 policy_action = policy_action.to(self.device)
 
-                pol_state = self.main(policy_state)
-                policy_dt = self.trunk(
-                    torch.cat([pol_state, policy_metrics, policy_action], dim=1))
-                policy_d = self.last_layer(policy_dt)
+                policy_state_features = self.main(policy_state)
+
+                policy_d = self.trunk(
+                    torch.cat([policy_state_features, policy_metrics, policy_action], dim=1))
 
                 expert_state, expert_metrics, expert_action = expert_batch
                 expert_state = expert_state.to(self.device)
                 expert_metrics = expert_metrics.to(self.device)
                 expert_action = expert_action.to(self.device)
-                exp_state = self.main(expert_state)
-                expert_dt = self.trunk(
-                    torch.cat([exp_state, expert_metrics, expert_action], dim=1))
-                expert_d = self.last_layer(expert_dt)
+
+                expert_state_features = self.main(expert_state)
+
+                expert_d = self.trunk(
+                    torch.cat([expert_state_features, expert_metrics, expert_action], dim=1))
                 expert_loss = torch.tanh(expert_d)
                 policy_loss = torch.tanh(policy_d)
                 expert_reward += expert_loss.sum().item()
@@ -279,9 +223,10 @@ class Discriminator(nn.Module):
         with torch.no_grad():
             self.eval()
 
-            stat = self.main(state)
-            dt = self.trunk(torch.cat([stat, metrics, action], dim=1))
-            d = self.last_layer(dt)
+            state_features = self.main(state)
+
+            d = self.trunk(
+                torch.cat([state_features, metrics, action], dim=1))
             s = torch.sigmoid(d)
             reward = -(1 - s).log()
             reward = reward.cpu()
@@ -348,7 +293,7 @@ class ExpertDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, j):
         traj_idx, i = self.get_idx[j]
-        
+
         rgb = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb/{:0>4d}.png'.format(traj_idx, i))
         rgb_left = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb_left/{:0>4d}.png'.format(traj_idx, i))
         rgb_right = Image.open(self.dataset_dir / 'episode_{:0>2d}/rgb_right/{:0>4d}.png'.format(traj_idx, i))

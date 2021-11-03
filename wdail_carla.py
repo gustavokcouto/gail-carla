@@ -100,10 +100,6 @@ def read_params():
     #     'gail_eps': 1e-8,
     #     # GAIL Optimizer betas param
     #     'gail_betas': [0.9, 0.99],
-    #     # GAIL consistency term lambda
-    #     'gail_ct_lambda': 2.0,
-    #     # GAIL use dropout on critic network
-    #     'gail_use_dropout': True,
     #     # duration of gail pre epoch
     #     'gail_thre': 5,
     #     # number of steps to train discriminator during pre epoch
@@ -131,7 +127,7 @@ def read_params():
     #     'use_activation': True
     # }
     params = {}
-    config_file = open('params_long.json')
+    config_file = open('params_short.json')
     config = json.load(config_file)
     params.update(config)
     return params
@@ -243,8 +239,6 @@ def train(params):
         params['gail_lr'],
         params['gail_eps'],
         params['gail_betas'],
-        params['gail_ct_lambda'],
-        params['gail_use_dropout'],
         params['gail_max_grad_norm'],
     )
 

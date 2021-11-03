@@ -138,7 +138,6 @@ def gailLearning_mujoco_origin(run_params,
         expert_rewards = []
         dis_losses = []
         dis_gps = []
-        dis_cts = []
         expert_losses = []
         policy_losses = []
         for _ in range(gail_epoch):
@@ -148,7 +147,6 @@ def gailLearning_mujoco_origin(run_params,
                 expert_reward_mean,
                 dis_loss,
                 dis_gp,
-                dis_ct,
                 expert_loss,
                 policy_loss
             ) = discriminator.update(
@@ -158,7 +156,6 @@ def gailLearning_mujoco_origin(run_params,
             expert_rewards.append(expert_reward_mean)
             dis_losses.append(dis_loss)
             dis_gps.append(dis_gp)
-            dis_cts.append(dis_ct)
             expert_losses.append(expert_loss)
             policy_losses.append(policy_loss)
 
@@ -167,7 +164,6 @@ def gailLearning_mujoco_origin(run_params,
                                            np.mean(np.array(expert_rewards)),
                                            np.mean(np.array(dis_losses)),
                                            np.mean(np.array(dis_gps)),
-                                           np.mean(np.array(dis_cts)),
                                            np.mean(np.array(expert_losses)),
                                            np.mean(np.array(policy_losses)),
                                            disc_pre_loss,

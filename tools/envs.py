@@ -40,8 +40,6 @@ def make_vec_envs(envs_params, device, ep_length, route_file):
 
     envs = SubprocVecEnv(envs)
 
-    envs = VecNormalize(envs)
-
     envs = VecPyTorch(envs, device)
 
     return envs
@@ -92,34 +90,6 @@ class EnvMonitor():
     def close(self):
         self.env.close()
         pass
-
-class VecNormalize(VecEnvWrapper):
-    """
-    A vectorized wrapper that normalizes the observations
-    and returns from an environment.
-    """
-
-    def __init__(self, venv, ob=True, ret=True, clipob=10., cliprew=10., gamma=0.99, epsilon=1e-8):
-        VecEnvWrapper.__init__(self, venv)
-        self.ret_rms = RunningMeanStd(shape=()) if ret else None
-        self.cliprew = cliprew
-        self.ret = np.zeros(self.num_envs)
-        self.gamma = gamma
-        self.epsilon = epsilon
-
-    def step_wait(self):
-        obs, metrics, rews, news, infos = self.venv.step_wait()
-        self.ret = self.ret * self.gamma + rews
-        if self.ret_rms:
-            self.ret_rms.update(self.ret)
-            rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-        self.ret[news] = 0.
-        return obs, metrics, rews, news, infos
-
-    def reset(self):
-        self.ret = np.zeros(self.num_envs)
-        obs, metrics = self.venv.reset()
-        return obs, metrics
 
 
 class VecPyTorch(VecEnvWrapper):
