@@ -61,17 +61,14 @@ class Discriminator(nn.Module):
             expert_metrics).to(expert_metrics.device)
         mixup_metrics = alpha_metrics * expert_metrics + \
             (1 - alpha_metrics) * policy_metrics
-        mixup_metrics.requires_grad = True
 
         alpha_action = alpha.expand_as(expert_action).to(expert_action.device)
         mixup_action = alpha_action * expert_action + \
             (1 - alpha_action) * policy_action
-        mixup_action.requires_grad = True
 
         mixup_state_features, mixup_state_transformed = self.obs_processor(mixup_state)
-
-        mixup_metrics_features = self.metrics_processor(mixup_metrics)
-        mixup_action_features = self.action_processor(mixup_action)
+        mixup_metrics_features, mixup_metrics_transformed = self.metrics_processor(mixup_metrics)
+        mixup_action_features, mixup_action_transformed = self.action_processor(mixup_action)
         
         mixup_data = torch.cat(
             [mixup_state_features, mixup_metrics_features, mixup_action_features], dim=1)
@@ -81,7 +78,7 @@ class Discriminator(nn.Module):
 
         grad = autograd.grad(
             outputs=disc,
-            inputs=(mixup_state_transformed, mixup_metrics, mixup_action),
+            inputs=(mixup_state_transformed, mixup_metrics_transformed, mixup_action_transformed),
             grad_outputs=ones,
             create_graph=True,
             retain_graph=True,
@@ -117,8 +114,8 @@ class Discriminator(nn.Module):
             policy_action = policy_action.to(self.device)
 
             policy_state_features, _ = self.obs_processor(policy_state)
-            policy_metrics_features = self.metrics_processor(policy_metrics)
-            policy_action_features = self.action_processor(policy_action)
+            policy_metrics_features, _ = self.metrics_processor(policy_metrics)
+            policy_action_features, _ = self.action_processor(policy_action)
 
             policy_d = self.trunk(
                 torch.cat([policy_state_features,  policy_metrics_features, policy_action_features], dim=1))
@@ -131,8 +128,8 @@ class Discriminator(nn.Module):
             expert_action = expert_action.to(self.device)
 
             expert_state_features, _ = self.obs_processor(expert_state)
-            expert_metrics_features = self.metrics_processor(expert_metrics)
-            expert_action_features = self.action_processor(expert_action)
+            expert_metrics_features, _ = self.metrics_processor(expert_metrics)
+            expert_action_features, _ = self.action_processor(expert_action)
 
             expert_d = self.trunk(
                 torch.cat([expert_state_features, expert_metrics_features, expert_action_features], dim=1))
@@ -188,8 +185,8 @@ class Discriminator(nn.Module):
                 policy_action = policy_action.to(self.device)
 
                 policy_state_features, _ = self.obs_processor(policy_state)
-                policy_metrics_features = self.metrics_processor(policy_metrics)
-                policy_action_features = self.action_processor(policy_action)
+                policy_metrics_features, _ = self.metrics_processor(policy_metrics)
+                policy_action_features, _ = self.action_processor(policy_action)
 
                 policy_d = self.trunk(
                     torch.cat([policy_state_features, policy_metrics_features, policy_action_features], dim=1))
@@ -200,8 +197,8 @@ class Discriminator(nn.Module):
                 expert_action = expert_action.to(self.device)
 
                 expert_state_features, _ = self.obs_processor(expert_state)
-                expert_metrics_features = self.metrics_processor(expert_metrics)
-                expert_action_features = self.action_processor(expert_action)
+                expert_metrics_features, _ = self.metrics_processor(expert_metrics)
+                expert_action_features, _ = self.action_processor(expert_action)
 
                 expert_d = self.trunk(
                     torch.cat([expert_state_features, expert_metrics_features, expert_action_features], dim=1))
@@ -223,8 +220,8 @@ class Discriminator(nn.Module):
             self.eval()
 
             state_features, _ = self.obs_processor(state)
-            metrics_features = self.metrics_processor(metrics)
-            action_features = self.action_processor(action)
+            metrics_features, _ = self.metrics_processor(metrics)
+            action_features, _ = self.action_processor(action)
 
             d = self.trunk(
                 torch.cat([state_features, metrics_features, action_features], dim=1))
