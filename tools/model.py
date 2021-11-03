@@ -55,29 +55,10 @@ class CNNBase(nn.Module):
     def __init__(self, obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent, hidden_size=512):
         super(CNNBase, self).__init__()
 
-        C, H, W = obs_shape
-
-        self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 64, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            Flatten()
-        )
-
-        for i in range(4):
-            H = (H - 4)//2 + 1
-            W = (W - 4)//2 + 1
-        # Get image dim
-        img_dim = 256*H*W
-
+        self.obs_processor = ProcessObsFeatures(obs_shape, bias=True)
 
         self.trunk = nn.Sequential(
-            nn.Linear(metrics_space.shape[0] + img_dim, hidden_size),
+            nn.Linear(self.obs_processor.output_dim + metrics_space.shape[0], hidden_size),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_size, 1 + num_outputs)
         )
@@ -100,7 +81,7 @@ class CNNBase(nn.Module):
                 break
 
     def forward(self, obs, metrics):
-        x = self.main(obs)
+        x = self.obs_processor(obs)
         nn_output = self.trunk(torch.cat([x, metrics], dim=1))
         critic = nn_output[...,0].unsqueeze(dim=1)
         output = nn_output[...,1:]
