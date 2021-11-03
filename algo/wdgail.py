@@ -270,6 +270,7 @@ class ExpertDataset(torch.utils.data.Dataset):
         self.i2i = {}
 
         self.length = self.trajectories['lengths'].sum().item()
+        self.actual_obs = [None for _ in range(self.length)]
 
         traj_idx = 0
         i = 0
@@ -291,16 +292,21 @@ class ExpertDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, j):
         traj_idx, i = self.get_idx[j]
+        # Load only the first time, images in uint8 are supposed to be light
+        if self.actual_obs[j] is None:
+            rgb = Image.open(self.dataset_dir /
+                            'episode_{:0>2d}/rgb/{:0>4d}.png'.format(traj_idx, i))
+            rgb_left = Image.open(
+                self.dataset_dir / 'episode_{:0>2d}/rgb_left/{:0>4d}.png'.format(traj_idx, i))
+            rgb_right = Image.open(
+                self.dataset_dir / 'episode_{:0>2d}/rgb_right/{:0>4d}.png'.format(traj_idx, i))
+            rgb = np.transpose(rgb, (2, 0, 1))
+            rgb_left = np.transpose(rgb_left, (2, 0, 1))
+            rgb_right = np.transpose(rgb_right, (2, 0, 1))
+            obs = np.concatenate((rgb, rgb_left, rgb_right))
+            self.actual_obs[j] = obs
+        else:
+            obs = self.actual_obs[j]
 
-        rgb = Image.open(self.dataset_dir /
-                         'episode_{:0>2d}/rgb/{:0>4d}.png'.format(traj_idx, i))
-        rgb_left = Image.open(
-            self.dataset_dir / 'episode_{:0>2d}/rgb_left/{:0>4d}.png'.format(traj_idx, i))
-        rgb_right = Image.open(
-            self.dataset_dir / 'episode_{:0>2d}/rgb_right/{:0>4d}.png'.format(traj_idx, i))
-        rgb = np.transpose(rgb, (2, 0, 1))
-        rgb_left = np.transpose(rgb_left, (2, 0, 1))
-        rgb_right = np.transpose(rgb_right, (2, 0, 1))
-        obs = np.concatenate((rgb, rgb_left, rgb_right))
         return torch.from_numpy(obs).float(), self.trajectories[
             'metrics'][traj_idx][i], self.trajectories['actions'][traj_idx][i]
