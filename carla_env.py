@@ -391,7 +391,7 @@ class CarlaEnv(gym.Env):
         speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
 
         metrics = np.array([target[0], target[1], speed, road_option.value])
-        obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
+        obs = np.concatenate((rgb, rgb_left, rgb_right))
 
         self.cur_length += 1
 

@@ -82,7 +82,7 @@ class CNNBase(nn.Module):
                 break
 
     def forward(self, obs, metrics):
-        obs_features = self.obs_processor(obs)
+        obs_features, _ = self.obs_processor(obs)
         metrics_features = self.metrics_processor(metrics)
 
         nn_output = self.trunk(torch.cat([obs_features, metrics_features], dim=1))
@@ -124,9 +124,11 @@ class ProcessObsFeatures(nn.Module):
 
     def forward(self, obs):
         # scale observation
-        # obs = obs / 255
-        
-        return self.main(obs)
+        obs_transformed = obs / 255
+        obs_transformed.requires_grad = True
+        obs_features = self.main(obs_transformed)
+
+        return obs_features, obs_transformed
 
 
 class ProcessMetrics(nn.Module):

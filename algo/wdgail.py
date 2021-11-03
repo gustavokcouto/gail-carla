@@ -55,7 +55,6 @@ class Discriminator(nn.Module):
         alpha_state = alpha.expand_as(expert_state).to(expert_state.device)
         mixup_state = alpha_state * expert_state + \
             (1 - alpha_state) * policy_state
-        mixup_state.requires_grad = True
 
         alpha = alpha.view(expert_state.size(0), 1)
         alpha_metrics = alpha.expand_as(
@@ -69,7 +68,8 @@ class Discriminator(nn.Module):
             (1 - alpha_action) * policy_action
         mixup_action.requires_grad = True
 
-        mixup_state_features = self.obs_processor(mixup_state)
+        mixup_state_features, mixup_state_transformed = self.obs_processor(mixup_state)
+
         mixup_metrics_features = self.metrics_processor(mixup_metrics)
         mixup_action_features = self.action_processor(mixup_action)
         
@@ -81,7 +81,7 @@ class Discriminator(nn.Module):
 
         grad = autograd.grad(
             outputs=disc,
-            inputs=(mixup_state, mixup_metrics, mixup_action),
+            inputs=(mixup_state_transformed, mixup_metrics, mixup_action),
             grad_outputs=ones,
             create_graph=True,
             retain_graph=True,
@@ -116,7 +116,7 @@ class Discriminator(nn.Module):
             policy_metrics = policy_metrics.to(self.device)
             policy_action = policy_action.to(self.device)
 
-            policy_state_features = self.obs_processor(policy_state)
+            policy_state_features, _ = self.obs_processor(policy_state)
             policy_metrics_features = self.metrics_processor(policy_metrics)
             policy_action_features = self.action_processor(policy_action)
 
@@ -130,7 +130,7 @@ class Discriminator(nn.Module):
             expert_metrics = expert_metrics.to(self.device)
             expert_action = expert_action.to(self.device)
 
-            expert_state_features = self.obs_processor(expert_state)
+            expert_state_features, _ = self.obs_processor(expert_state)
             expert_metrics_features = self.metrics_processor(expert_metrics)
             expert_action_features = self.action_processor(expert_action)
 
@@ -187,7 +187,7 @@ class Discriminator(nn.Module):
                 policy_metrics = policy_metrics.to(self.device)
                 policy_action = policy_action.to(self.device)
 
-                policy_state_features = self.obs_processor(policy_state)
+                policy_state_features, _ = self.obs_processor(policy_state)
                 policy_metrics_features = self.metrics_processor(policy_metrics)
                 policy_action_features = self.action_processor(policy_action)
 
@@ -199,7 +199,7 @@ class Discriminator(nn.Module):
                 expert_metrics = expert_metrics.to(self.device)
                 expert_action = expert_action.to(self.device)
 
-                expert_state_features = self.obs_processor(expert_state)
+                expert_state_features, _ = self.obs_processor(expert_state)
                 expert_metrics_features = self.metrics_processor(expert_metrics)
                 expert_action_features = self.action_processor(expert_action)
 
@@ -222,7 +222,7 @@ class Discriminator(nn.Module):
         with torch.no_grad():
             self.eval()
 
-            state_features = self.obs_processor(state)
+            state_features, _ = self.obs_processor(state)
             metrics_features = self.metrics_processor(metrics)
             action_features = self.action_processor(action)
 
@@ -304,6 +304,6 @@ class ExpertDataset(torch.utils.data.Dataset):
         rgb = np.transpose(rgb, (2, 0, 1))
         rgb_left = np.transpose(rgb_left, (2, 0, 1))
         rgb_right = np.transpose(rgb_right, (2, 0, 1))
-        obs = np.concatenate((rgb, rgb_left, rgb_right)) / 255
+        obs = np.concatenate((rgb, rgb_left, rgb_right))
         return torch.from_numpy(obs).float(), self.trajectories[
             'metrics'][traj_idx][i], self.trajectories['actions'][traj_idx][i]
