@@ -134,25 +134,43 @@ class ProcessObsFeatures(nn.Module):
 class ProcessMetrics(nn.Module):
     def __init__(self, metrics_shape):
         super(ProcessMetrics, self).__init__()
+
+        target_embedding_dimension = 8
+        self.target_disc_space = 1000
+        self.target_x_embedding = nn.Embedding(self.target_disc_space, target_embedding_dimension)
+        self.target_y_embedding = nn.Embedding(self.target_disc_space, target_embedding_dimension)
+
+        speed_embedding_dimension = 8
+        self.speed_disc_space = 1000
+        self.speed_embedding = nn.Embedding(self.speed_disc_space, speed_embedding_dimension)
+
         road_option_embedding_dimension = 8
         max_road_options = 10
         self.road_option_embedding = nn.Embedding(max_road_options, road_option_embedding_dimension)
-        self.output_dim = metrics_shape - 1 + road_option_embedding_dimension
+
+        self.output_dim = 2 * target_embedding_dimension + speed_embedding_dimension + road_option_embedding_dimension
 
     def forward(self, metrics):
         # metrics composition [target[0], target[1], speed, int(road_option)]
 
-        # scale target by 1000
-        metrics[:, 0:2] = 1000 * metrics[:, 0:2]
+        # max target of 0.001
+        target_buckets = np.linspace(-0.001, 0.001, num=self.target_disc_space)
+        target_x_disc = np.digitize(metrics[:, 0].cpu(), target_buckets)
+        target_y_disc = np.digitize(metrics[:, 1].cpu(), target_buckets)
+        target_x_disc = torch.from_numpy(target_x_disc).long().to(metrics.device)
+        target_y_disc = torch.from_numpy(target_y_disc).long().to(metrics.device)
+        target_x_features = self.target_x_embedding(target_x_disc)
+        target_y_features = self.target_y_embedding(target_y_disc)
 
-        # scale speed by 0.1
-        metrics[:, 2] = 0.1 * metrics[:, 2]
+        # max of 60m/s or 216km/h
+        speed_buckets = np.linspace(-60, 60, num=self.speed_disc_space)
+        speed_disc = np.digitize(metrics[:, 2].cpu(), speed_buckets)
+        speed_disc = torch.from_numpy(speed_disc).long().to(metrics.device)
+        speed_features = self.speed_embedding(speed_disc)
 
         road_option_features = self.road_option_embedding(metrics[:, 3].long())
-        metrics_transformed = metrics[:, :3].clone()
-        metrics_transformed.requires_grad = True
 
-        metrics_transformed = torch.cat([metrics_transformed, road_option_features], dim=1)
+        metrics_transformed = torch.cat([target_x_features, target_y_features, speed_features, road_option_features], dim=1)
 
         return metrics_transformed, metrics_transformed
 
