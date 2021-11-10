@@ -31,7 +31,6 @@ class Discriminator(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
-        self.to(device)
         self.train()
 
         self.max_grad_norm = max_grad_norm

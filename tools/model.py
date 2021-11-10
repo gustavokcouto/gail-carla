@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from tools.utils import init
+
+from tools.resnet import resnet18
 
 
 class Flatten(nn.Module):
@@ -55,7 +55,7 @@ class CNNBase(nn.Module):
     def __init__(self, obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent, hidden_size=512):
         super(CNNBase, self).__init__()
 
-        self.obs_processor = ProcessObsFeatures(obs_shape, bias=True)
+        self.obs_processor = ProcessObsFeaturesResnet(obs_shape, bias=True)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         
         self.trunk = nn.Sequential(
@@ -121,6 +121,23 @@ class ProcessObsFeatures(nn.Module):
 
         # Get image dim
         self.output_dim = 256*H*W
+
+    def forward(self, obs):
+        # scale observation
+        obs_transformed = obs / 255
+        obs_transformed.requires_grad = True
+        obs_features = self.main(obs_transformed)
+
+        return obs_features, obs_transformed
+
+
+class ProcessObsFeaturesResnet(nn.Module):
+    def __init__(self, obs_shape, bias=True):
+        super(ProcessObsFeaturesResnet, self).__init__()
+        input_channels, _, _ = obs_shape
+        self.output_dim = 512
+
+        self.main = resnet18(input_channels)
 
     def forward(self, obs):
         # scale observation

@@ -127,7 +127,7 @@ def read_params():
     #     'use_activation': True
     # }
     params = {}
-    config_file = open('params_short.json')
+    config_file = open('params_long.json')
     config = json.load(config_file)
     params.update(config)
     return params
@@ -209,7 +209,6 @@ def train(params):
         params['use_activation'],
         params['std_dev'],
         params['var_ent'])
-    actor_critic.to(device)
 
     # learn_bc(actor_critic, envs, device, gail_train_loader)
 
@@ -253,12 +252,12 @@ def train(params):
                                        device=device,
                                        utli=utli)
 
-    return 0
+    return model
 
 
 def main(params):
 
-    model, env = train(params)
+    model = train(params)
 
     return model
 

@@ -60,7 +60,6 @@ def gailLearning_mujoco_origin(run_params,
                                   env_eval.action_space)
 
     nupdates = np.floor(run_params['num_env_steps'] / nsteps)
-    nupdates = nupdates.astype(np.int16)
 
     epinfobuf = deque(maxlen=10)
 
@@ -94,6 +93,7 @@ def gailLearning_mujoco_origin(run_params,
                 run_params['lr'])
 
         actor_critic.set_epoch(i_update)
+        actor_critic.to(device)
         EnvEpoch.set_epoch(i_update)
 
         for step in range(nbatch):
@@ -123,6 +123,8 @@ def gailLearning_mujoco_origin(run_params,
         with torch.no_grad():
             next_value = actor_critic.get_value(
                 rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
+        actor_critic.cpu()
+        discriminator.to(device)
 
         # gail
         disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
@@ -185,6 +187,9 @@ def gailLearning_mujoco_origin(run_params,
                 else:
                     epgailbuf.append(cum_gailrewards[i_env])
                     cum_gailrewards[i_env] = .0
+
+        discriminator.cpu()
+        actor_critic.to(device)
 
         # compute returns
         rollouts.compute_returns(
