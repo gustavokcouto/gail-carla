@@ -93,6 +93,7 @@ def gailLearning_mujoco_origin(run_params,
                 run_params['lr'])
 
         actor_critic.set_epoch(i_update)
+        discriminator.cpu()
         actor_critic.to(device)
         EnvEpoch.set_epoch(i_update)
 
@@ -188,12 +189,12 @@ def gailLearning_mujoco_origin(run_params,
                     epgailbuf.append(cum_gailrewards[i_env])
                     cum_gailrewards[i_env] = .0
 
-        discriminator.cpu()
-        actor_critic.to(device)
-
         # compute returns
         rollouts.compute_returns(
             next_value, run_params['gamma'], run_params['gae_lambda'])
+
+        discriminator.cpu()
+        actor_critic.to(device)
 
         # training PPO policy
         if run_params['bcgail']:
@@ -235,6 +236,8 @@ def gailLearning_mujoco_origin(run_params,
             metrics = torch.stack([metrics])
             rollout_eval.obs[steps_eval].copy_(obs.cpu())
             rollout_eval.metrics[steps_eval].copy_(metrics.cpu())
+            actor_critic.cpu()
+            discriminator.to(device)
             disc_eval_loss, expert_eval_reward, policy_eval_reward = discriminator.compute_loss(
                 gail_val_loader, rollout_eval, batch_size=steps_eval-1)
 
