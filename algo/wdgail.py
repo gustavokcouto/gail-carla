@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.utils.data
 from torch import autograd
 
-from tools.model import ProcessObsFeatures, ProcessMetrics, ProcessAction
+from tools.model import ProcessObsFeatures, ProcessMetrics, ProcessAction, OutputLayers
 import torch.optim as optim
 from PIL import Image
 
@@ -24,12 +24,9 @@ class Discriminator(nn.Module):
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         self.action_processor = ProcessAction(action_space.shape[0])
 
-        self.trunk = nn.Sequential(
-            nn.Linear(
-                self.obs_processor.output_dim + self.metrics_processor.output_dim + self.action_processor.output_dim, hidden_dim),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, 1)
-        )
+        input_size = self.obs_processor.output_dim + self.metrics_processor.output_dim + self.action_processor.output_dim
+        output_size = 1
+        self.trunk = OutputLayers(input_size, output_size, hidden_size=hidden_dim)
 
         self.train()
 
