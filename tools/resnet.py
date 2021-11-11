@@ -63,12 +63,67 @@ class BasicBlock(nn.Module):
         return out
 
 
+class Bottleneck(nn.Module):
+    # Bottleneck in torchvision places the stride for downsampling at 3x3 convolution(self.conv2)
+    # while original implementation places the stride at the first 1x1 convolution(self.conv1)
+    # according to "Deep residual learning for image recognition"https://arxiv.org/abs/1512.03385.
+    # This variant is also known as ResNet V1.5 and improves accuracy according to
+    # https://ngc.nvidia.com/catalog/model-scripts/nvidia:resnet_50_v1_5_for_pytorch.
+
+    expansion: int = 4
+
+    def __init__(
+        self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        downsample: Optional[nn.Module] = None,
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
+    ) -> None:
+        super().__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+        # Both self.conv2 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv1x1(inplanes, planes)
+        self.bn1 = norm_layer(planes)
+        self.conv2 = conv3x3(planes, planes, stride)
+        self.bn2 = norm_layer(planes)
+        self.conv3 = conv1x1(planes, planes * self.expansion)
+        self.bn3 = norm_layer(planes * self.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x: Tensor) -> Tensor:
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
+
 class ResNet(nn.Module):
     def __init__(
         self,
-        block: Type[BasicBlock],
+        block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
         input_channels,
+        output_dim
     ) -> None:
         super().__init__()
         self._norm_layer = nn.BatchNorm2d
@@ -83,6 +138,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512 * block.expansion, output_dim)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -93,17 +149,17 @@ class ResNet(nn.Module):
 
     def _make_layer(
         self,
-        block: Type[BasicBlock],
+        block: Type[Union[BasicBlock, Bottleneck]],
         planes: int,
         blocks: int,
         stride: int = 1,
     ) -> nn.Sequential:
         norm_layer = self._norm_layer
         downsample = None
-        if stride != 1 or self.inplanes != planes:
+        if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                conv1x1(self.inplanes, planes, stride),
-                norm_layer(planes),
+                conv1x1(self.inplanes, planes * block.expansion, stride),
+                norm_layer(planes * block.expansion),
             )
 
         layers = []
@@ -112,7 +168,7 @@ class ResNet(nn.Module):
                 self.inplanes, planes, stride, downsample, norm_layer
             )
         )
-        self.inplanes = planes
+        self.inplanes = planes * block.expansion
         for _ in range(1, blocks):
             layers.append(
                 block(
@@ -138,6 +194,7 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
+        x = self.fc(x)
 
         return x
 
@@ -145,8 +202,15 @@ class ResNet(nn.Module):
         return self._forward_impl(x)
 
 
-def resnet18(input_channels) -> ResNet:
+def resnet18(input_channels, output_dim) -> ResNet:
     r"""ResNet-18 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_.
     """
-    return ResNet(BasicBlock, [2, 2, 2, 2], input_channels)
+    return ResNet(BasicBlock, [2, 2, 2, 2], input_channels, output_dim)
+
+
+def resnet50(input_channels, output_dim) -> ResNet:
+    r"""ResNet-50 model from
+    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_.
+    """
+    return ResNet(Bottleneck, [3, 4, 6, 3], input_channels, output_dim)
