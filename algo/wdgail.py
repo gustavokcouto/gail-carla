@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.utils.data
 from torch import autograd
 
-from tools.model import ProcessObsFeatures, ProcessMetrics, ProcessAction, OutputLayers
+from tools.model import ProcessObsFeatures, ProcessObsFeaturesResnet, ProcessMetrics, ProcessAction, OutputLayers
 import torch.optim as optim
 from PIL import Image
 
@@ -18,7 +18,6 @@ class Discriminator(nn.Module):
     def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None):
         super(Discriminator, self).__init__()
         self.device = device
-        C, H, W = state_shape
 
         self.obs_processor = ProcessObsFeatures(state_shape, bias=False)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])

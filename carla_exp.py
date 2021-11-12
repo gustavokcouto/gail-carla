@@ -115,5 +115,5 @@ def gen_trajectories(route_file=''):
     torch.save(data, expert_file)
 
 if __name__ == "__main__":
-    gen_trajectories(Path('data/route_01.xml'))
+    gen_trajectories(Path('data/route_00.xml'))
     pass

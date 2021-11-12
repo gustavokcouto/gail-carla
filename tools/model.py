@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 
 from torchvision.models.resnet import resnet18, resnet50
+# from tools.resnet import resnet18, resnet50
 
 
 class Flatten(nn.Module):
@@ -56,7 +57,7 @@ class CNNBase(nn.Module):
     def __init__(self, obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent, hidden_size=512):
         super(CNNBase, self).__init__()
 
-        self.obs_processor = ProcessObsFeatures(obs_shape, bias=True)
+        self.obs_processor = ProcessObsFeaturesResnet(obs_shape, bias=True)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
 
         input_size = self.obs_processor.output_dim + self.metrics_processor.output_dim
@@ -136,7 +137,8 @@ class ProcessObsFeaturesResnet(nn.Module):
         input_channels, _, _ = obs_shape
         self.output_dim = 1000
 
-        self.main = resnet50()
+        # self.main = resnet18(input_channels, self.output_dim)
+        self.main = resnet18()
         old_conv = self.main.conv1
         self.main.conv1 = torch.nn.Conv2d(input_channels, old_conv.out_channels, kernel_size=old_conv.kernel_size,
                                           stride=old_conv.stride, padding=old_conv.padding, bias=old_conv.bias)
@@ -167,7 +169,8 @@ class ProcessMetrics(nn.Module):
         max_road_options = 10
         self.road_option_embedding = nn.Embedding(max_road_options, road_option_embedding_dimension)
 
-        self.output_dim = metrics_shape + 2 - 1 + road_option_embedding_dimension + speed_embedding_dimension + 2 * target_embedding_dimension
+        # self.output_dim = metrics_shape + 2 - 1 + road_option_embedding_dimension + speed_embedding_dimension + 2 * target_embedding_dimension
+        self.output_dim = metrics_shape - 1 + road_option_embedding_dimension
 
     def forward(self, metrics):
         # metrics composition [target[0], target[1], speed, int(road_option)]
@@ -214,10 +217,10 @@ class ProcessMetrics(nn.Module):
         road_options_tensor = torch.from_numpy(road_options).long().to(metrics.device)
         road_option_features = self.road_option_embedding(road_options_tensor)
 
-        metrics_transformed = torch.cat([metrics_target_x, metrics_target_y, metrics_target_r, metrics_target_theta, metrics_speed], dim=1).clone().to(metrics.device)
+        metrics_transformed = torch.cat([metrics_target_x, metrics_target_y, metrics_speed], dim=1).clone().to(metrics.device)
         metrics_transformed.requires_grad = True
 
-        metrics_transformed = torch.cat([metrics_transformed, target_r_features, target_theta_features, speed_features, road_option_features], dim=1)
+        metrics_transformed = torch.cat([metrics_transformed, road_option_features], dim=1)
 
         return metrics_transformed, metrics_transformed
 
@@ -240,7 +243,7 @@ class OutputLayers(nn.Module):
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, output_size)
-        self.activation = nn.ReLU(inplace=True)
+        self.activation = nn.LeakyReLU(0.2)
 
     def forward(self, input):
         # scale observation

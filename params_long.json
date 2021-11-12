@@ -56,6 +56,6 @@
     "eval_interval": 3,
     "bcgail": true,
     "decay": 0.99,
-    "gailgamma": 0.0,
+    "gailgamma": 0,
     "use_activation": true
 }
