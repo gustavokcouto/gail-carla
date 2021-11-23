@@ -91,14 +91,14 @@ if __name__ == '__main__':
 
     gail_train_loader = torch.utils.data.DataLoader(
         ExpertDataset(
-        file_name, num_trajectories=7, subsample_frequency=1),
+        file_name, num_trajectories=7),
         batch_size=128,
         shuffle=True,
         drop_last=True)
     
     gail_val_loader = torch.utils.data.DataLoader(
         ExpertDataset(
-        file_name, num_trajectories=3, start=7, subsample_frequency=1),
+        file_name, num_trajectories=3, start=7),
         batch_size=128,
         shuffle=True,
         drop_last=True)

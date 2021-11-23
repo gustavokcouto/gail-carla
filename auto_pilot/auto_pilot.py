@@ -66,6 +66,6 @@ class AutoPilot():
 
         steer = np.clip(steer + 1e-2 * np.random.randn(), -1.0, 1.0)
 
-        control = [steer, throttle]
+        control = np.array([steer, throttle])
 
         return control

@@ -21,9 +21,9 @@ class EnvEpoch():
         return cls.envs_epoch
 
 
-def make_env(env_host, env_port, ep_length, route_file, env_id):
+def make_env(env_host, env_port, ep_length, route_file, env_id, n_routes):
     def _thunk():
-        env = CarlaEnv(env_host, env_port, ep_length, route_file, env_id=env_id)
+        env = CarlaEnv(env_host, env_port, ep_length, route_file, env_id=env_id, train=True, n_routes=n_routes)
 
         env = EnvMonitor(env)
 
@@ -32,9 +32,9 @@ def make_env(env_host, env_port, ep_length, route_file, env_id):
     return _thunk
 
 
-def make_vec_envs(envs_params, device, ep_length, route_file):
+def make_vec_envs(envs_params, device, ep_length, route_file, n_routes):
     envs = [
-        make_env(env_params['host'], env_params['port'], ep_length, route_file, 'train_env_{}'.format(env_id))
+        make_env(env_params['host'], env_params['port'], ep_length, route_file, 'train_env_{}'.format(env_id), n_routes)
         for env_id, env_params in enumerate(envs_params)
     ]
 

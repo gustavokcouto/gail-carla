@@ -8,7 +8,6 @@ import json
 import os
 import sys
 from pathlib import Path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # GAIL baseline
 # python main.py --env-name CarRacing-v0 --algo ppo --gail --gail-experts-dir /serverdata/rohit/BCGAIL/CarRacingPPO/ --use-gae --lr 2.5e-4 --clip-param 0.1 --value-loss-coef 0.5 --num-processes 8 --num-steps 128 --num-mini-batch 4 --log-interval 1 --use-linear-lr-decay --entropy-coef 0.01 --model_name CarRacingGAIL --gail-batch-size 32
@@ -108,12 +107,6 @@ def read_params():
     #     'gail_epoch': 2,
     #     # max norm of gradients (default: 0.5)
     #     'gail_max_grad_norm': 0.5,
-    #     # num trajs
-    #     'num_trajs': 10,
-    #     # num validation trajs
-    #     'num_val_trajs': 2,
-    #     # trajectories subsample frequency
-    #     'subsample_frequency': 1,
     #     # log interval, one log per n updates (default: 10)
     #     'log_interval': 1,
     #     # eval interval, one eval per n updates (default: 10)
@@ -127,7 +120,7 @@ def read_params():
     #     'use_activation': True
     # }
     params = {}
-    config_file = open('params_short.json')
+    config_file = open('params_variable.json')
     config = json.load(config_file)
     params.update(config)
     return params
@@ -163,34 +156,24 @@ def train(params):
     device = torch.device(
         'cuda:' + str(params['cuda']) if torch.cuda.is_available() else 'cpu')
 
-    file_name = os.path.join(
-        params['gail_experts_dir'], params['trajectory'], "trajs_{}.pt".format(
-            params['env_name'].split('-')[0].lower()))
+    dataset_directory = Path(params['gail_experts_dir']) / params['trajectory']
 
     gail_train_loader = torch.utils.data.DataLoader(
         ExpertDataset(
-            file_name,
-            num_trajectories=params['num_trajs'],
-            subsample_frequency=params['subsample_frequency']
+            dataset_directory,
+            n_routes=params['n_routes'],
         ),
         batch_size=params['gail_batch_size'],
         shuffle=True,
-        drop_last=True)
-
-    gail_val_loader = torch.utils.data.DataLoader(
-        ExpertDataset(
-            file_name,
-            num_trajectories=params['num_val_trajs'],
-            subsample_frequency=params['subsample_frequency'],
-            start=params['num_trajs']
-        ),
-        batch_size=params['gail_batch_size'],
-        shuffle=True,
-        drop_last=True)
+        drop_last=True,
+        num_workers=8,
+        persistent_workers=True,
+        pin_memory=True
+        )
 
     env_route_file = Path('data/' + params['trajectory'] + '.xml')
     envs = make_vec_envs(params['envs_params'], device,
-                         params['env_ep_length'], env_route_file)
+                         params['env_ep_length'], env_route_file, params['n_routes'])
     env_eval = CarlaEnv(
         params['env_eval_params']['host'],
         params['env_eval_params']['port'],
@@ -209,7 +192,6 @@ def train(params):
         params['use_activation'],
         params['std_dev'],
         params['var_ent'])
-    actor_critic.to(device)
 
     # learn_bc(actor_critic, envs, device, gail_train_loader)
 
@@ -249,16 +231,15 @@ def train(params):
                                        agent=agent,
                                        discriminator=discr,
                                        gail_train_loader=gail_train_loader,
-                                       gail_val_loader=gail_val_loader,
                                        device=device,
                                        utli=utli)
 
-    return 0
+    return model
 
 
 def main(params):
 
-    model, env = train(params)
+    model = train(params)
 
     return model
 

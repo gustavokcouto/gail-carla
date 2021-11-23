@@ -20,7 +20,6 @@ def gailLearning_mujoco_origin(run_params,
                                agent,
                                discriminator,
                                gail_train_loader,
-                               gail_val_loader,
                                device,
                                utli
                                ):
@@ -94,6 +93,8 @@ def gailLearning_mujoco_origin(run_params,
                 run_params['lr'])
 
         actor_critic.set_epoch(i_update)
+        discriminator.cpu()
+        actor_critic.to(device)
         EnvEpoch.set_epoch(i_update)
 
         for step in range(nbatch):
@@ -123,10 +124,12 @@ def gailLearning_mujoco_origin(run_params,
         with torch.no_grad():
             next_value = actor_critic.get_value(
                 rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
+        actor_critic.cpu()
+        discriminator.to(device)
 
         # gail
         disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
-            gail_val_loader, rollouts)
+            gail_train_loader, rollouts)
         gail_epoch = run_params['gail_epoch']
         if i_update < run_params['gail_thre']:
             gail_epoch += (run_params['gail_pre_epoch'] - run_params['gail_epoch']) * \
@@ -190,6 +193,9 @@ def gailLearning_mujoco_origin(run_params,
         rollouts.compute_returns(
             next_value, run_params['gamma'], run_params['gae_lambda'])
 
+        discriminator.cpu()
+        actor_critic.to(device)
+
         # training PPO policy
         if run_params['bcgail']:
             value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
@@ -230,8 +236,10 @@ def gailLearning_mujoco_origin(run_params,
             metrics = torch.stack([metrics])
             rollout_eval.obs[steps_eval].copy_(obs.cpu())
             rollout_eval.metrics[steps_eval].copy_(metrics.cpu())
+            actor_critic.cpu()
+            discriminator.to(device)
             disc_eval_loss, expert_eval_reward, policy_eval_reward = discriminator.compute_loss(
-                gail_val_loader, rollout_eval, batch_size=steps_eval-1)
+                gail_train_loader, rollout_eval, batch_size=steps_eval-1)
 
         utli.recordLossResults(results=(value_loss,
                                         action_loss,

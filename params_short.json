@@ -48,8 +48,6 @@
     "gail_epoch": 4,
     "gail_max_grad_norm": 0.5,
     "num_trajs": 10,
-    "num_val_trajs": 2,
-    "subsample_frequency": 1,
     "log_interval": 1,
     "eval_interval": 3,
     "bcgail": 1,

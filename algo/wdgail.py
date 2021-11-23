@@ -1,7 +1,7 @@
-import itertools
+from pathlib import Path
 
 import numpy as np
-from pathlib import Path
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.utils.data
@@ -31,7 +31,6 @@ class Discriminator(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
-        self.to(device)
         self.train()
 
         self.max_grad_norm = max_grad_norm
@@ -240,73 +239,42 @@ class Discriminator(nn.Module):
 
 
 class ExpertDataset(torch.utils.data.Dataset):
-    def __init__(self, file_name, num_trajectories=4, subsample_frequency=20, start=0):
-        all_trajectories = torch.load(file_name)
-        self.dataset_dir = Path(file_name).parent
-
-        perm = torch.randperm(all_trajectories['actions'].size(0))
-        # idx = perm[:num_trajectories]
-        idx = np.arange(num_trajectories) + start
-
-        self.trajectories = {}
-
-        # See https://github.com/pytorch/pytorch/issues/14886
-        # .long() for fixing bug in torch v0.4.1
-        start_idx = torch.randint(
-            0, subsample_frequency, size=(num_trajectories,)).long()
-
-        for k, v in all_trajectories.items():
-            data = v[idx]
-
-            if k != 'lengths':
-                samples = []
-                for i in range(num_trajectories):
-                    samples.append(data[i, start_idx[i]::subsample_frequency])
-                self.trajectories[k] = torch.stack(samples)
-            else:
-                self.trajectories[k] = data // subsample_frequency
-
-        self.i2traj_idx = {}
-        self.i2i = {}
-
-        self.length = self.trajectories['lengths'].sum().item()
-        self.actual_obs = [None for _ in range(self.length)]
-
-        traj_idx = 0
-        i = 0
-
+    def __init__(self, dataset_directory, n_routes=1):
+        self.dataset_path = Path(dataset_directory)
+        self.length = 0
         self.get_idx = []
+        self.trajectories = {}
+        self.trajs_actions = []
+        self.trajs_metrics = []
 
-        for j in range(self.length):
+        for route_idx in range(n_routes):
+            route_path = self.dataset_path / ('route_%02d' % route_idx)
+            route_df = pd.read_json(route_path / 'episode.json')
+            traj_length = route_df.shape[0]
+            self.length += traj_length
+            for step_idx in range(traj_length):
+                self.get_idx.append((route_idx, step_idx))
+                self.trajs_actions.append(torch.Tensor(route_df.iloc[step_idx]['actions']))
+                self.trajs_metrics.append(torch.Tensor(route_df.iloc[step_idx]['metrics']))
 
-            while self.trajectories['lengths'][traj_idx].item() <= i:
-                i -= self.trajectories['lengths'][traj_idx].item()
-                traj_idx += 1
-
-            self.get_idx.append((traj_idx, i))
-
-            i += 1
+        self.trajs_actions = torch.stack(self.trajs_actions)
+        self.trajs_metrics = torch.stack(self.trajs_metrics)
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, j):
-        traj_idx, i = self.get_idx[j]
+        route_idx, i = self.get_idx[j]
         # Load only the first time, images in uint8 are supposed to be light
-        if self.actual_obs[j] is None:
-            rgb = Image.open(self.dataset_dir /
-                            'episode_{:0>2d}/rgb/{:0>4d}.png'.format(traj_idx, i))
-            rgb_left = Image.open(
-                self.dataset_dir / 'episode_{:0>2d}/rgb_left/{:0>4d}.png'.format(traj_idx, i))
-            rgb_right = Image.open(
-                self.dataset_dir / 'episode_{:0>2d}/rgb_right/{:0>4d}.png'.format(traj_idx, i))
-            rgb = np.transpose(rgb, (2, 0, 1))
-            rgb_left = np.transpose(rgb_left, (2, 0, 1))
-            rgb_right = np.transpose(rgb_right, (2, 0, 1))
-            obs = np.concatenate((rgb, rgb_left, rgb_right))
-            self.actual_obs[j] = obs
-        else:
-            obs = self.actual_obs[j]
+        rgb = Image.open(self.dataset_path /
+                        'route_{:0>2d}/rgb/{:0>4d}.png'.format(route_idx, i))
+        rgb_left = Image.open(
+            self.dataset_path / 'route_{:0>2d}/rgb_left/{:0>4d}.png'.format(route_idx, i))
+        rgb_right = Image.open(
+            self.dataset_path / 'route_{:0>2d}/rgb_right/{:0>4d}.png'.format(route_idx, i))
+        rgb = np.transpose(rgb, (2, 0, 1))
+        rgb_left = np.transpose(rgb_left, (2, 0, 1))
+        rgb_right = np.transpose(rgb_right, (2, 0, 1))
+        obs = np.concatenate((rgb, rgb_left, rgb_right))
 
-        return torch.from_numpy(obs).float(), self.trajectories[
-            'metrics'][traj_idx][i], self.trajectories['actions'][traj_idx][i]
+        return torch.from_numpy(obs).float(), self.trajs_metrics[j], self.trajs_actions[j]

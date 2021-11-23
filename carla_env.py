@@ -156,7 +156,7 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, host, port, ep_length, route_file, train=True, eval=False, env_id=None):
+    def __init__(self, host, port, ep_length, routes_file, train=False, eval=False, env_id=None, n_routes=1):
         super(CarlaEnv, self).__init__()
 
         self._client = carla.Client(host, port)
@@ -165,11 +165,8 @@ class CarlaEnv(gym.Env):
 
         set_sync_mode(self._client, False)
 
-        self._town_name = 'Town01'
-        self._world = self._client.load_world(self._town_name)
-        self._map = self._world.get_map()
-
-        self._blueprints = self._world.get_blueprint_library()
+        self.routes = parse_routes_file(routes_file)
+        self.n_routes = n_routes
 
         self._tick = 0
         self._player = None
@@ -187,28 +184,21 @@ class CarlaEnv(gym.Env):
         self.metrics_space = spaces.Box(low=-100, high=100,
                                         shape=(4,), dtype=np.float32)
 
-        self.trajectory = parse_routes_file(route_file)
-
         self._waypoint_planner = RoutePlanner(1e-5, 5e-4)
         self._command_planner = RoutePlanner(1e-4, 2.5e-4, 258)
 
         self.ep_length = ep_length
         self.collision_sensor = None
         self.lane_sensor = None
-        self._speed_controller = PIDController(K_P=5.0, K_I=0.5, K_D=1.0, n=40)
-
-        set_sync_mode(self._client, True)
 
         self.train = train
         self.eval = eval
 
-        self._spawn_player()
-        self._setup_sensors()
-        self.debug = Plotter(259, gps=True)
-
     def _spawn_player(self):
-        start_pose = self.get_start_position()
-        vehicle_bp = np.random.choice(self._blueprints.filter(VEHICLE_NAME))
+        reset_trajectory = True
+        start_pose = self.get_start_position(reset_trajectory)
+        blueprints = self._world.get_blueprint_library()
+        vehicle_bp = np.random.choice(blueprints.filter(VEHICLE_NAME))
         vehicle_bp.set_attribute('role_name', 'hero')
 
         self._player = self._world.spawn_actor(vehicle_bp, start_pose)
@@ -257,30 +247,9 @@ class CarlaEnv(gym.Env):
         self._sensors['gnss'] = GNSS(self._world, self._player)
         self._sensors['imu'] = IMU(self._world, self._player)
 
-    def get_start_position(self):
-        route_completed = (self._command_planner.route_completed() or
-                           len(self._command_planner.route) == 0)
-        training = self.train and not self.eval
-        random_start = training and (
-            not self._player or (
-                not route_completed and
-                np.random.randint(10) == 0
-            )
-        )
-
-        if random_start:
-            print('random_start')
-
-        reset_position = route_completed or \
-            self.eval or \
-            random_start
-
-        if reset_position:
-            start = 0
-            if random_start:
-                start = np.random.randint(len(self.trajectory) - 2)
-            global_plan_gps, global_plan_world_coord = interpolate_trajectory(
-                self._world, self.trajectory[start:])
+    def get_start_position(self, reset_trajectory):
+        if reset_trajectory:
+            global_plan_gps, global_plan_world_coord = interpolate_trajectory(self._world, self.trajectory)
 
             self._waypoint_planner.set_route(
                 global_plan_gps, global_plan_world_coord)
@@ -301,7 +270,8 @@ class CarlaEnv(gym.Env):
         return start_pose
 
     def reset_player_position(self):
-        start_pose = self.get_start_position()
+        reset_trajectory = self._command_planner.route_completed() or not self.train
+        start_pose = self.get_start_position(reset_trajectory)
 
         ticks = 4
         velocity = carla.Vector3D()
@@ -312,7 +282,31 @@ class CarlaEnv(gym.Env):
             self._player.set_target_angular_velocity(velocity)
             self._player.set_target_velocity(velocity)
 
+    def set_route(self, route_id=0):
+        self.route = self.routes[route_id]
+        self._world = self._client.load_world(self.route['town'])
+        self._map = self._world.get_map()
+        self.trajectory = self.route['trajectory']
+
+        set_sync_mode(self._client, True)
+        self._spawn_player()
+        self._setup_sensors()
+
     def reset(self):
+        if len(self._command_planner.route) == 0:
+            if (self.train or self.eval) and self.n_routes == 1:
+                route_idx = 0
+            elif self.eval:
+                route_idx = self.n_routes
+            elif self.train:
+                route_idx = np.random.randint(self.n_routes)
+
+            self.set_route(route_idx)
+        
+        if self._command_planner.route_completed() and self.train:
+            route_idx = np.random.randint(self.n_routes)
+            self.set_route(route_idx)
+            
         self.reset_player_position()
 
         for x in self._actor_dict['camera']:
@@ -380,12 +374,6 @@ class CarlaEnv(gym.Env):
         ])
 
         target = rotation_matrix.T.dot(far_node - gps)
-        # metrics = np.concatenate(([speed], target))
-        self.debug.clear()
-        origin = np.array([0, 0])
-        self.debug.dot(origin, target, (255, 0, 0))
-        self.debug.dot(origin, origin, (0, 0, 255))
-        self.debug.show()
 
         velocity = self._player.get_velocity()
         speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])

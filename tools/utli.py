@@ -94,10 +94,9 @@ def write2tensorboard(results, time_step):
 def Log_save_name4gail(run_params):
 
     save_name = run_params['algo'] + '_' + run_params['env_name'] + \
-                '_seed_{}_num_trajs_{}_subsample_frequency_{}_gail_{}_{}'\
+                '_seed_{}_n_routes_{}_gail_{}_{}'\
                     .format(run_params['seed'],
-                            run_params['num_trajs'],
-                            run_params['subsample_frequency'],
+                            run_params['n_routes'],
                             run_params['gail_batch_size'],
                             run_params['gail_epoch']
                             )

@@ -10,16 +10,25 @@ import xml.etree.ElementTree as ET
 
 import carla
 
-def parse_routes_file(route_filename, single_route=None):
+def parse_routes_file(route_filename):
     list_route_descriptions = []
     tree = ET.parse(route_filename)
     for route in tree.iter("route"):
+
+        route_id = route.attrib['id']
+
+        new_config = {}
+        new_config['town'] = route.attrib['town']
+        new_config['name'] = "RouteScenario_{}".format(route_id)
+
         waypoint_list = []  # the list of waypoints that can be found on this route
         for waypoint in route.iter('waypoint'):
             waypoint_list.append(carla.Location(x=float(waypoint.attrib['x']),
                                                 y=float(waypoint.attrib['y']),
                                                 z=float(waypoint.attrib['z'])))
 
-        trajectory = waypoint_list
+        new_config['trajectory'] = waypoint_list
 
-    return trajectory
+        list_route_descriptions.append(new_config)
+
+    return list_route_descriptions

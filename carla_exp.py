@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import tqdm
 import carla
-import torch
 import pandas as pd
 
 from PIL import Image
@@ -18,44 +17,35 @@ from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
 from tools.envs import EnvMonitor
 
-def gen_trajectories(route_file=''):
+def gen_trajectories(routes_file=''):
     # Instantiate the env
     np.random.seed(1337)
-    ep_len = 2400
+    ep_max_len = 2400
     host = 'localhost'
     port = 2000
-    env = CarlaEnv(host, port, ep_len, route_file, train=False, eval=True, env_id='expert')
+    env = CarlaEnv(host, port, ep_max_len, routes_file, train=False, eval=True, env_id='expert')
     
-    expert_file_dir = Path('gail_experts') / route_file.stem
+    expert_file_dir = Path('gail_experts') / routes_file.stem
     expert_file_dir.mkdir(parents=True)
 
     env = EnvMonitor(env, output_path=expert_file_dir)
 
-    trajectory = parse_routes_file(route_file)
-    global_plan_gps, global_plan_world_coord = interpolate_trajectory(env.env._world, trajectory)
-
-    # Test the trained agent
-    n_episodes = 12
-    metrics = []
-    actions = []
-    rewards = []
-
-    lens = []
-    max_len = 0
-    for episode in tqdm.tqdm(range(n_episodes)):
-        episode_dir = expert_file_dir / ('episode_%02d' % episode)
+    for route_id in tqdm.tqdm(range(12)):
+        env.env.set_route(route_id)
+        trajectory = env.env.trajectory
+        global_plan_gps, global_plan_world_coord = interpolate_trajectory(env.env._world, trajectory)
+        episode_dir = expert_file_dir / ('route_%02d' % route_id)
         (episode_dir / 'rgb').mkdir(parents=True)
         (episode_dir / 'rgb_left').mkdir(parents=True)
         (episode_dir / 'rgb_right').mkdir(parents=True)
         (episode_dir / 'topdown').mkdir(parents=True)
         metrics_ep = []
         actions_ep = []
-        rewards_ep = []
 
         i_step = 0
         _, step_metrics = env.reset()
         auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
-        while not env.env.route_completed:
+        while not env.env.route_completed and i_step < ep_max_len:
             ego_metrics = [
                 env.env.info['gps_x'],
                 env.env.info['gps_y'],
@@ -65,55 +55,30 @@ def gen_trajectories(route_file=''):
             action = auto_pilot.run_step(ego_metrics)
 
             metrics_ep.append(step_metrics)
-            reward = 0
-            rewards_ep.append(reward)
             actions_ep.append(action)
             Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
             Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
             Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
             Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
 
-            _, step_metrics, reward, _, _ = env.step(action)
+            _, step_metrics, _, _, _ = env.step(action)
             i_step += 1
 
         metrics_ep.append(step_metrics)
-        reward = 0
-        rewards_ep.append(reward)
+        actions_ep.append(action)
 
         Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
         Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
         Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
         Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
 
-        ep_len = len(actions_ep)
-        if ep_len > max_len:
-            max_len = ep_len
+        ep_df = pd.DataFrame({
+            'actions': actions_ep,
+            'metrics': metrics_ep,
+        })
 
-        actions.append(actions_ep)
-        rewards.append(rewards_ep)
-        metrics.append(metrics_ep)
-        lens.append(ep_len)
-
-    for i_ep, ep_len in enumerate(lens):
-        for i_step in range(ep_len, max_len):
-            actions[i_ep].append(actions[i_ep][-1])
-            rewards[i_ep].append(rewards[i_ep][-1])
-            metrics[i_ep].append(metrics[i_ep][-1])
-
-    metrics = torch.as_tensor(metrics).float()
-    actions = torch.as_tensor(actions).float()
-    lens = torch.as_tensor(lens).long()
-    rewards = torch.as_tensor(rewards).long()
-    data = {
-        'actions': actions,
-        'metrics': metrics,
-        'lengths': lens,
-        'rewards': rewards
-    }
-
-    expert_file = expert_file_dir / 'trajs_carla.pt'
-    torch.save(data, expert_file)
+        ep_df.to_json(episode_dir / 'episode.json')
 
 if __name__ == "__main__":
-    gen_trajectories(Path('data/route_01.xml'))
+    gen_trajectories(Path('data/routes_training.xml'))
     pass
