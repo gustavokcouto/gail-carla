@@ -55,7 +55,7 @@ class CNNBase(nn.Module):
     def __init__(self, obs_shape, metrics_space, num_outputs, activation, std_dev, var_ent, hidden_size=512):
         super(CNNBase, self).__init__()
 
-        self.obs_processor = ProcessObsFeatures(obs_shape, bias=True)
+        self.obs_processor = ProcessObsFeatures(obs_shape)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         
         self.trunk = nn.Sequential(
@@ -99,18 +99,18 @@ class CNNBase(nn.Module):
 
 
 class ProcessObsFeatures(nn.Module):
-    def __init__(self, obs_shape, bias=True):
+    def __init__(self, obs_shape):
         super(ProcessObsFeatures, self).__init__()
         C, H, W = obs_shape
 
         self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2, bias=bias),
+            nn.Conv2d(C, 32, 4, stride=2),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 64, 4, stride=2, bias=bias),
+            nn.Conv2d(32, 64, 4, stride=2),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 4, stride=2, bias=bias),
+            nn.Conv2d(64, 128, 4, stride=2),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 4, stride=2, bias=bias),
+            nn.Conv2d(128, 256, 4, stride=2),
             nn.LeakyReLU(0.2),
             Flatten()
         )

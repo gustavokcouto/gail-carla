@@ -156,7 +156,7 @@ class IMU(object):
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, host, port, ep_length, routes_file, train=False, eval=False, env_id=None, n_routes=1):
+    def __init__(self, host, port, ep_length, routes_file, train=False, eval=False, env_id=None, route_id=1):
         super(CarlaEnv, self).__init__()
 
         self._client = carla.Client(host, port)
@@ -166,7 +166,7 @@ class CarlaEnv(gym.Env):
         set_sync_mode(self._client, False)
 
         self.routes = parse_routes_file(routes_file)
-        self.n_routes = n_routes
+        self.route_id = route_id
 
         self._tick = 0
         self._player = None
@@ -294,19 +294,8 @@ class CarlaEnv(gym.Env):
 
     def reset(self):
         if len(self._command_planner.route) == 0:
-            if (self.train or self.eval) and self.n_routes == 1:
-                route_idx = 0
-            elif self.eval:
-                route_idx = self.n_routes
-            elif self.train:
-                route_idx = np.random.randint(self.n_routes)
-
-            self.set_route(route_idx)
+            self.set_route(self.route_id)
         
-        if self._command_planner.route_completed() and self.train:
-            route_idx = np.random.randint(self.n_routes)
-            self.set_route(route_idx)
-            
         self.reset_player_position()
 
         for x in self._actor_dict['camera']:

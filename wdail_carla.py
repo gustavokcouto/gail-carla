@@ -166,9 +166,9 @@ def train(params):
         batch_size=params['gail_batch_size'],
         shuffle=True,
         drop_last=True,
-        num_workers=8,
-        persistent_workers=True,
-        pin_memory=True
+        # num_workers=8,
+        # persistent_workers=True,
+        # pin_memory=True
         )
 
     env_route_file = Path('data/' + params['trajectory'] + '.xml')
@@ -180,7 +180,8 @@ def train(params):
         params['env_ep_length'],
         env_route_file,
         eval=True,
-        env_id='eval_env'
+        env_id='eval_env',
+        route_id=params['n_routes']
     )
     env_eval = EnvMonitor(env_eval)
 

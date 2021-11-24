@@ -20,7 +20,7 @@ class Discriminator(nn.Module):
         self.device = device
         C, H, W = state_shape
 
-        self.obs_processor = ProcessObsFeatures(state_shape, bias=False)
+        self.obs_processor = ProcessObsFeatures(state_shape)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         self.action_processor = ProcessAction(action_space.shape[0])
 
@@ -259,22 +259,27 @@ class ExpertDataset(torch.utils.data.Dataset):
 
         self.trajs_actions = torch.stack(self.trajs_actions)
         self.trajs_metrics = torch.stack(self.trajs_metrics)
+        self.actual_obs = [None for _ in range(self.length)]
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, j):
         route_idx, i = self.get_idx[j]
-        # Load only the first time, images in uint8 are supposed to be light
-        rgb = Image.open(self.dataset_path /
-                        'route_{:0>2d}/rgb/{:0>4d}.png'.format(route_idx, i))
-        rgb_left = Image.open(
-            self.dataset_path / 'route_{:0>2d}/rgb_left/{:0>4d}.png'.format(route_idx, i))
-        rgb_right = Image.open(
-            self.dataset_path / 'route_{:0>2d}/rgb_right/{:0>4d}.png'.format(route_idx, i))
-        rgb = np.transpose(rgb, (2, 0, 1))
-        rgb_left = np.transpose(rgb_left, (2, 0, 1))
-        rgb_right = np.transpose(rgb_right, (2, 0, 1))
-        obs = np.concatenate((rgb, rgb_left, rgb_right))
+        if self.actual_obs[j] is None:
+            # Load only the first time, images in uint8 are supposed to be light
+            rgb = Image.open(self.dataset_path /
+                            'route_{:0>2d}/rgb/{:0>4d}.png'.format(route_idx, i))
+            rgb_left = Image.open(
+                self.dataset_path / 'route_{:0>2d}/rgb_left/{:0>4d}.png'.format(route_idx, i))
+            rgb_right = Image.open(
+                self.dataset_path / 'route_{:0>2d}/rgb_right/{:0>4d}.png'.format(route_idx, i))
+            rgb = np.transpose(rgb, (2, 0, 1))
+            rgb_left = np.transpose(rgb_left, (2, 0, 1))
+            rgb_right = np.transpose(rgb_right, (2, 0, 1))
+            obs = np.concatenate((rgb, rgb_left, rgb_right))
+            self.actual_obs[j] = obs
+        else:
+            obs = self.actual_obs[j]
 
         return torch.from_numpy(obs).float(), self.trajs_metrics[j], self.trajs_actions[j]
