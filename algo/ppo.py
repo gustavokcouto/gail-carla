@@ -12,7 +12,6 @@ class PPO():
                  ppo_epoch,
                  num_mini_batch,
                  value_loss_coef,
-                 entropy_coef,
                  device,
                  lr=None,
                  eps=None,
@@ -32,7 +31,6 @@ class PPO():
         self.act_space = act_space
 
         self.value_loss_coef = value_loss_coef
-        self.entropy_coef = entropy_coef
 
         self.device = device
 
@@ -114,8 +112,7 @@ class PPO():
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                 self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss -
-                 dist_entropy * self.entropy_coef).backward()
+                (value_loss * self.value_loss_coef + action_loss).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
                 self.optimizer.step()

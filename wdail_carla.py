@@ -191,8 +191,7 @@ def train(params):
         envs.metrics_space,
         envs.action_space,
         params['use_activation'],
-        params['std_dev'],
-        params['var_ent'])
+        params['logstd'])
 
     # learn_bc(actor_critic, envs, device, gail_train_loader)
 
@@ -202,7 +201,6 @@ def train(params):
         params['ppo_epoch'],
         params['num_mini_batch'],
         params['value_loss_coef'],
-        params['entropy_coef'],
         device,
         lr=params['lr'],
         eps=params['eps'],

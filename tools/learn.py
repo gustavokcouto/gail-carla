@@ -1,5 +1,7 @@
 import os
 import shutil
+from pathlib import Path
+
 from tensorboardX import SummaryWriter
 import torch
 import numpy as np
@@ -8,6 +10,7 @@ import time
 from tools import utils, utli
 from tools.storage import RolloutStorage
 from tools.envs import EnvEpoch
+
 
 def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
@@ -26,7 +29,7 @@ def gailLearning_mujoco_origin(run_params,
 
     log_save_name = utli.Log_save_name4gail(run_params)
     log_save_path = os.path.join("./runs", log_save_name)
-    if os.path.exists(log_save_path):
+    if not run_params['resume_training'] and os.path.exists(log_save_path):
         shutil.rmtree(log_save_path)
     utli.writer = SummaryWriter(log_save_path)
 
@@ -77,9 +80,18 @@ def gailLearning_mujoco_origin(run_params,
 
     start = time.time()
 
-    best_episode = 0
     steps_eval = 0
     eval_reward = None
+
+    model_path = Path('gail_model.pt')
+    if run_params['resume_training']:
+        load_data = torch.load(model_path)
+        actor_critic.load_state_dict(load_data[0])
+        discriminator.load_state_dict(load_data[1])
+        i_update = load_data[2]
+        episode_t = load_data[3]
+        start -= load_data[4]
+
     while i_update < nupdates:
 
         episode_t += 1
@@ -92,7 +104,6 @@ def gailLearning_mujoco_origin(run_params,
                 agent.optimizer, i_update, nupdates,
                 run_params['lr'])
 
-        actor_critic.set_epoch(i_update)
         discriminator.cpu()
         actor_critic.to(device)
         EnvEpoch.set_epoch(i_update)
@@ -269,9 +280,8 @@ def gailLearning_mujoco_origin(run_params,
                                               ),
                                      time_step=i_update)
 
-        if eval_reward > best_episode:
-            best_episode = eval_reward
-            torch.save(actor_critic.state_dict(), 'carla_actor.pt')
+        time_diff = time.time() - start
+        torch.save([actor_critic.state_dict(), discriminator.state_dict(), i_update, episode_t, time_diff], model_path)
 
         print("Episode: %d,   Time steps: %d,   Mean length: %d    Mean Reward: %f    Mean Gail Reward:%f"
               % (episode_t, time_step, eplenmean, eprewmean, np.mean(np.array(epgailbuf))))

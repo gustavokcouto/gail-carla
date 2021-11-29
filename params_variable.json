@@ -32,15 +32,9 @@
     "betas": [0.9, 0.99],
     "gamma": 0.99,
     "gae_lambda": 0.95,
-    "entropy_coef": 0.0,
-    "var_ent": false,
     "value_loss_coef": 0.5,
     "max_grad_norm": 0.5,
-    "std_dev": [
-        {
-            "logstd": [-2.0, -3.2]
-        }
-    ],
+    "logstd": [-2.0, -3.2],
     "gail_experts_dir": "./gail_experts",
     "gail_batch_size": 128,
     "gail_lr": 2.5e-4,
@@ -55,5 +49,6 @@
     "bcgail": 1,
     "decay": 0.99,
     "gailgamma": 0.0,
-    "use_activation": true
+    "use_activation": true,
+    "resume_training": true
 }
