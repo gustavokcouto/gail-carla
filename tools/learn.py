@@ -38,7 +38,6 @@ def gailLearning_mujoco_origin(run_params,
     # begin optimize
 
     time_step = 0
-    episode_t = 0
 
     # begin optimize
     nsteps = run_params['num_steps']
@@ -89,12 +88,10 @@ def gailLearning_mujoco_origin(run_params,
         actor_critic.load_state_dict(load_data[0])
         discriminator.load_state_dict(load_data[1])
         i_update = load_data[2]
-        episode_t = load_data[3]
-        start -= load_data[4]
+        start -= load_data[3]
 
     while i_update < nupdates:
 
-        episode_t += 1
         i_update += 1
         epinfos = []
 
@@ -281,10 +278,10 @@ def gailLearning_mujoco_origin(run_params,
                                      time_step=i_update)
 
         time_diff = time.time() - start
-        torch.save([actor_critic.state_dict(), discriminator.state_dict(), i_update, episode_t, time_diff], model_path)
+        torch.save([actor_critic.state_dict(), discriminator.state_dict(), i_update, time_diff], model_path)
 
         print("Episode: %d,   Time steps: %d,   Mean length: %d    Mean Reward: %f    Mean Gail Reward:%f"
-              % (episode_t, time_step, eplenmean, eprewmean, np.mean(np.array(epgailbuf))))
+              % (i_update, time_step, eplenmean, eprewmean, np.mean(np.array(epgailbuf))))
 
         if i_update % run_params['log_interval'] == 0 and len(episode_rewards) > 1:
             total_num_steps = (i_update + 1) * run_params['num_steps']
