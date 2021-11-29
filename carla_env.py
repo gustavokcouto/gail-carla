@@ -375,12 +375,6 @@ class CarlaEnv(gym.Env):
         done = False
 
         reward = 0
-        if self.lane_invasion:
-            reward -= 2
-
-        if self.collision:
-            reward -= 5
-
         route_metrics = self._waypoint_planner.route_completion()
         if self.last_route_metrics != route_metrics:
             reward += route_metrics - self.last_route_metrics
