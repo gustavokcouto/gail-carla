@@ -8,7 +8,7 @@
 
     "env_ep_length": 2400,
     "trajectory": "routes_training",
-    "n_routes": 9,
+    "n_routes": 1,
     "envs_params": [
         {"host": "192.168.0.4", "port": 2000},
         {"host": "192.168.0.4", "port": 2002},
@@ -23,10 +23,11 @@
     ],
     "env_eval_params": {"host": "192.168.0.4", "port": 2010},
 
-    "num_steps": 12000,
+    "num_steps": 7200,
+    "replay_radius": 3,
     "lr": 1.0e-4,
     "ppo_epoch": 4,
-    "num_mini_batch": 16,
+    "mini_batch_size": 128,
     "clip_param": 0.1,
     "eps": 1e-8,
     "betas": [0.9, 0.99],
@@ -41,8 +42,8 @@
     "gail_eps": 1e-8,
     "gail_betas": [0.9, 0.99],
     "gail_thre": 5,
-    "gail_pre_epoch": 10,
-    "gail_epoch": 2,
+    "gail_pre_epoch": 60,
+    "gail_epoch": 12,
     "gail_max_grad_norm": 0.5,
     "log_interval": 1,
     "eval_interval": 3,
@@ -50,5 +51,5 @@
     "decay": 0.99,
     "gailgamma": 0.0,
     "use_activation": true,
-    "resume_training": true
+    "resume_training": false
 }
