@@ -47,18 +47,22 @@ def gailLearning_mujoco_origin(run_params,
     nbatch = np.floor(nsteps/nenv)
     nbatch = nbatch.astype(np.int16)
 
+    obs_shape = envs.observation_space.shape
+    metrics_shape = envs.metrics_space.shape
+    action_shape = envs.action_space.shape
     # The buffer
     rollouts = RolloutStorage(nbatch,
                               len(run_params['envs_params']),
-                              envs.observation_space.shape,
-                              envs.metrics_space.shape,
-                              envs.action_space)
+                              obs_shape,
+                              metrics_shape,
+                              action_shape
+                              radius=run_params['replay_radius'])
 
     rollout_eval = RolloutStorage(env_eval.ep_length,
                                   1,
-                                  env_eval.observation_space.shape,
-                                  env_eval.metrics_space.shape,
-                                  env_eval.action_space)
+                                  obs_shape,
+                                  metrics_shape,
+                                  action_shape)
 
     nupdates = np.floor(run_params['num_env_steps'] / nsteps)
     nupdates = nupdates.astype(np.int16)
@@ -74,8 +78,8 @@ def gailLearning_mujoco_origin(run_params,
     i_update = 0
 
     obs, metrics = envs.reset()
-    rollouts.obs[0].copy_(obs)
-    rollouts.metrics[0].copy_(metrics)
+    rollouts.obs[0][rollouts.iter].copy_(obs)
+    rollouts.metrics[0][rollouts.iter].copy_(metrics)
 
     start = time.time()
 
@@ -104,14 +108,19 @@ def gailLearning_mujoco_origin(run_params,
         discriminator.cpu()
         actor_critic.to(device)
         EnvEpoch.set_epoch(i_update)
+        if rollouts.full:
+            n_steps = rollouts.num_steps
+        else:
+            n_steps = rollouts.radius * rollouts.num_steps
 
-        for step in range(nbatch):
+        step = 0
+        for _ in range(n_steps):
             time_step += 1
 
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob = actor_critic.act(
-                    rollouts.obs[step].to(device), rollouts.metrics[step].to(device))
+                    rollouts.obs[step][rollouts.iter].to(device), rollouts.metrics[step][rollouts.iter].to(device))
 
             obs, metrics, rewards, done, infos = envs.step(action)
 
@@ -128,10 +137,16 @@ def gailLearning_mujoco_origin(run_params,
             rollouts.insert(obs.cpu(), metrics.cpu(), action.cpu(),
                             action_log_prob, value, rewards, masks)
 
+            step += 1
+            if step >= rollouts.num_steps:
+                step = 0
+                rollouts.after_update()
+
         print('finished sim')
         with torch.no_grad():
-            next_value = actor_critic.get_value(
-                rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
+            rollouts.value_preds[-1] = actor_critic.get_value(
+                rollouts.obs[-1].view(-1, *obs_shape).to(device),
+                rollouts.metrics[-1].view(-1, *metrics_shape).to(device)).detach()
         actor_critic.cpu()
         discriminator.to(device)
 
@@ -184,22 +199,21 @@ def gailLearning_mujoco_origin(run_params,
 
         for step in range(nbatch):
             rollouts.gail_rewards[step] = discriminator.predict_reward(
-                rollouts.obs[step].to(device),
-                rollouts.metrics[step].to(device),
-                rollouts.actions[step].to(device),
+                rollouts.obs[step].view(-1, *obs_shape).to(device),
+                rollouts.metrics[step].view(-1, *metrics_shape).to(device),
+                rollouts.actions[step].view(-1, *action_shape).to(device),
                 run_params['gamma'],
-                rollouts.masks[step])
+                rollouts.masks[step].view(-1, 1))
 
             for i_env in range(len(run_params['envs_params'])):
-                if rollouts.masks[step][i_env]:
-                    cum_gailrewards[i_env] += rollouts.gail_rewards[step][i_env].item()
+                if rollouts.masks[step][rollouts.iter][i_env]:
+                    cum_gailrewards[i_env] += rollouts.gail_rewards[step][rollouts.iter][i_env].item()
                 else:
                     epgailbuf.append(cum_gailrewards[i_env])
                     cum_gailrewards[i_env] = .0
 
         # compute returns
-        rollouts.compute_returns(
-            next_value, run_params['gamma'], run_params['gae_lambda'])
+        rollouts.compute_returns(run_params['gamma'], run_params['gae_lambda'])
 
         discriminator.cpu()
         actor_critic.to(device)
@@ -227,9 +241,9 @@ def gailLearning_mujoco_origin(run_params,
                         metrics,
                         deterministic=True
                     )
-                rollout_eval.obs[steps_eval].copy_(obs.cpu())
-                rollout_eval.metrics[steps_eval].copy_(metrics.cpu())
-                rollout_eval.actions[steps_eval].copy_(actions.cpu())
+                rollout_eval.obs[steps_eval][rollout_eval.iter].copy_(obs.cpu())
+                rollout_eval.metrics[steps_eval][rollout_eval.iter].copy_(metrics.cpu())
+                rollout_eval.actions[steps_eval][rollout_eval.iter].copy_(actions.cpu())
 
                 action = actions.cpu().numpy()[0]
                 obs, metrics, _, done, info = env_eval.step(action)
@@ -242,8 +256,8 @@ def gailLearning_mujoco_origin(run_params,
             obs = torch.stack([obs])
             metrics = torch.from_numpy(metrics).float()
             metrics = torch.stack([metrics])
-            rollout_eval.obs[steps_eval].copy_(obs.cpu())
-            rollout_eval.metrics[steps_eval].copy_(metrics.cpu())
+            rollout_eval.obs[steps_eval][rollout_eval.iter].copy_(obs.cpu())
+            rollout_eval.metrics[steps_eval][rollout_eval.iter].copy_(metrics.cpu())
             actor_critic.cpu()
             discriminator.to(device)
             disc_eval_loss, expert_eval_reward, policy_eval_reward = discriminator.compute_loss(

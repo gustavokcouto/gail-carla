@@ -181,7 +181,7 @@ def train(params):
         env_route_file,
         eval=True,
         env_id='eval_env',
-        route_id=params['n_routes']
+        route_id=0
     )
     env_eval = EnvMonitor(env_eval)
 
@@ -199,7 +199,7 @@ def train(params):
         actor_critic,
         params['clip_param'],
         params['ppo_epoch'],
-        params['num_mini_batch'],
+        params['mini_batch_size'],
         params['value_loss_coef'],
         device,
         lr=params['lr'],

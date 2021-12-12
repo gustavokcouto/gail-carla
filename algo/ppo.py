@@ -10,7 +10,7 @@ class PPO():
                  actor_critic,
                  clip_param,
                  ppo_epoch,
-                 num_mini_batch,
+                 mini_batch_size,
                  value_loss_coef,
                  device,
                  lr=None,
@@ -27,7 +27,7 @@ class PPO():
 
         self.clip_param = clip_param
         self.ppo_epoch = ppo_epoch
-        self.num_mini_batch = num_mini_batch
+        self.mini_batch_size = mini_batch_size
         self.act_space = act_space
 
         self.value_loss_coef = value_loss_coef
@@ -58,7 +58,7 @@ class PPO():
 
         for e in range(self.ppo_epoch):
             data_generator = rollouts.feed_forward_generator(
-                advantages, num_mini_batch=self.num_mini_batch)
+                advantages, self.mini_batch_size)
 
             for sample in data_generator:
                 obs_batch, metrics_batch, actions_batch, \
