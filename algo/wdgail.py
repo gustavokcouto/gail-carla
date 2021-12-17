@@ -94,7 +94,7 @@ class Discriminator(nn.Module):
         self.train()
 
         policy_data_generator = rollouts.feed_forward_generator(
-            None, mini_batch_size=expert_loader.batch_size)
+            None, mini_batch_size=expert_loader.batch_size, only_last_cycle=True)
 
         loss = 0
         expert_ac_loss = 0
@@ -228,14 +228,7 @@ class Discriminator(nn.Module):
             reward = -(1 - s).log()
             reward = reward.cpu()
 
-            if self.returns is None:
-                self.returns = reward.clone()
-
-            if update_rms:
-                self.returns = self.returns * masks * gamma + reward
-                self.ret_rms.update(self.returns.cpu().numpy())
-
-            return reward / np.sqrt(self.ret_rms.var[0] + 1e-8)
+            return reward
 
 
 class ExpertDataset(torch.utils.data.Dataset):

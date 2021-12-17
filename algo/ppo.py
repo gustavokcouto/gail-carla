@@ -44,6 +44,11 @@ class PPO():
 
     def update(self, rollouts, expert_dataset=None):
         # Expert dataset in case the BC update is required
+        # advantages = torch. zeros_like(rollouts.action_log_probs)
+        # for iter in range(rollouts.radius):
+        #     advantages_iter = rollouts.returns[:-1,iter] - rollouts.value_preds[:-1,iter]
+        #     advantages[:, iter] = (advantages_iter - advantages_iter.mean()) / (
+        #         advantages_iter.std() + 1e-5)
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
             advantages.std() + 1e-5)
@@ -56,7 +61,8 @@ class PPO():
         steer_std_epoch = 0
         throttle_std_epoch = 0
 
-        for e in range(self.ppo_epoch):
+        n_updates = 0
+        for _ in range(self.ppo_epoch):
             data_generator = rollouts.feed_forward_generator(
                 advantages, self.mini_batch_size)
 
@@ -122,17 +128,15 @@ class PPO():
                 dist_entropy_epoch += dist_entropy.item()
                 steer_std_epoch += steer_std.item()
                 throttle_std_epoch += throttle_std.item()
+                n_updates += 1
 
-        num_updates = self.ppo_epoch * self.num_mini_batch
-
-        value_loss_epoch /= num_updates
-        action_loss_epoch /= num_updates
-        dist_entropy_epoch /= num_updates
-        bc_loss_epoch /= num_updates
-        gail_action_loss_epoch /= num_updates
-        steer_std_epoch /= num_updates
-        throttle_std_epoch /= num_updates
-        last_gamma = self.gamma
+        value_loss_epoch /= n_updates
+        action_loss_epoch /= n_updates
+        dist_entropy_epoch /= n_updates
+        bc_loss_epoch /= n_updates
+        gail_action_loss_epoch /= n_updates
+        steer_std_epoch /= n_updates
+        throttle_std_epoch /= n_updates
 
         if self.gamma is not None:
             self.gamma *= self.decay
