@@ -181,7 +181,7 @@ def train(params):
         env_route_file,
         eval=True,
         env_id='eval_env',
-        route_id=0
+        route_id=params['n_routes']
     )
     env_eval = EnvMonitor(env_eval)
 

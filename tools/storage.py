@@ -64,51 +64,37 @@ class RolloutStorage(object):
                                batch_size=None,
                                only_last_cycle=False):
         if only_last_cycle:
-            if batch_size is None:
-                batch_size = self.num_processes * self.num_steps
+            radius = 1
 
-            sampler = BatchSampler(
-                SubsetRandomSampler(range(batch_size)),
-                mini_batch_size,
-                drop_last=True)
-
-            for indices in sampler:
-                obs_batch = self.obs[:-1,self.iter].reshape(-1, *self.obs.size()[3:])[indices]
-                metrics_batch = self.metrics[:-1,self.iter].reshape(-1, self.metrics.size(-1))[indices]
-                actions_batch = self.actions[:,self.iter].reshape(-1, self.actions.size(-1))[indices]
-                value_preds_batch = self.value_preds[:-1,self.iter].reshape(-1, 1)[indices]
-                return_batch = self.returns[:-1,self.iter].reshape(-1, 1)[indices]
-                masks_batch = self.masks[:-1,self.iter].reshape(-1, 1)[indices]
-                old_action_log_probs_batch = self.action_log_probs[:,self.iter].reshape(-1, 1)[indices]
-                if advantages is None:
-                    adv_targ = None
-                else:
-                    adv_targ = advantages[:,self.iter].reshape(-1, 1)[indices]
-
-                yield obs_batch, metrics_batch, actions_batch, \
-                    value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
+            iter_init = self.iter
+            iter_end = self.iter + 1
 
         else:
-            if batch_size is None:
-                batch_size = self.radius * self.num_processes * self.num_steps
+            radius = self.radius
 
-            sampler = BatchSampler(
-                SubsetRandomSampler(range(batch_size)),
-                mini_batch_size,
-                drop_last=True)
+            iter_init = 0
+            iter_end = self.radius
 
-            for indices in sampler:
-                obs_batch = self.obs[:-1].reshape(-1, *self.obs.size()[3:])[indices]
-                metrics_batch = self.metrics[:-1].reshape(-1, self.metrics.size(-1))[indices]
-                actions_batch = self.actions.reshape(-1, self.actions.size(-1))[indices]
-                value_preds_batch = self.value_preds[:-1].reshape(-1, 1)[indices]
-                return_batch = self.returns[:-1].reshape(-1, 1)[indices]
-                masks_batch = self.masks[:-1].reshape(-1, 1)[indices]
-                old_action_log_probs_batch = self.action_log_probs.reshape(-1, 1)[indices]
-                if advantages is None:
-                    adv_targ = None
-                else:
-                    adv_targ = advantages.reshape(-1, 1)[indices]
+        if batch_size is None:
+            batch_size = radius * self.num_processes * self.num_steps
 
-                yield obs_batch, metrics_batch, actions_batch, \
-                    value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
+        sampler = BatchSampler(
+            SubsetRandomSampler(range(batch_size)),
+            mini_batch_size,
+            drop_last=True)
+
+        for indices in sampler:
+            obs_batch = self.obs[:-1,iter_init:iter_end].reshape(-1, *self.obs.size()[3:])[indices]
+            metrics_batch = self.metrics[:-1,iter_init:iter_end].reshape(-1, self.metrics.size(-1))[indices]
+            actions_batch = self.actions[:,iter_init:iter_end].reshape(-1, self.actions.size(-1))[indices]
+            value_preds_batch = self.value_preds[:-1,iter_init:iter_end].reshape(-1, 1)[indices]
+            return_batch = self.returns[:-1,iter_init:iter_end].reshape(-1, 1)[indices]
+            masks_batch = self.masks[:-1,iter_init:iter_end].reshape(-1, 1)[indices]
+            old_action_log_probs_batch = self.action_log_probs[:,iter_init:iter_end].reshape(-1, 1)[indices]
+            if advantages is None:
+                adv_targ = None
+            else:
+                adv_targ = advantages[:,iter_init:iter_end].reshape(-1, 1)[indices]
+
+            yield obs_batch, metrics_batch, actions_batch, \
+                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
