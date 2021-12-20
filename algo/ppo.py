@@ -44,11 +44,6 @@ class PPO():
 
     def update(self, rollouts, expert_dataset=None):
         # Expert dataset in case the BC update is required
-        # advantages = torch. zeros_like(rollouts.action_log_probs)
-        # for iter in range(rollouts.radius):
-        #     advantages_iter = rollouts.returns[:-1,iter] - rollouts.value_preds[:-1,iter]
-        #     advantages[:, iter] = (advantages_iter - advantages_iter.mean()) / (
-        #         advantages_iter.std() + 1e-5)
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
             advantages.std() + 1e-5)

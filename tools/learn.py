@@ -141,23 +141,21 @@ def gailLearning_mujoco_origin(run_params,
                 rollouts.after_update()
 
         print('finished sim')
-        for iter in range(rollouts.radius):
-            for step in range(nbatch):
-                with torch.no_grad():
-                    value_preds, action_log_probs, _, _, _ = actor_critic.evaluate_actions(
-                        rollouts.obs[step][iter].to(device),
-                        rollouts.metrics[step][iter].to(device),
-                        rollouts.actions[step][iter].to(device)
-                    )
-                rollouts.value_preds[step][iter] = value_preds.detach()
-                rollouts.action_log_probs[step][iter] = action_log_probs.detach()
-
-        for iter in range(rollouts.radius):
+        for step in range(nbatch):
             with torch.no_grad():
-                last_value = actor_critic.get_value(
-                    rollouts.obs[-1][iter].to(device),
-                    rollouts.metrics[-1][iter].to(device)).detach()
-                rollouts.value_preds[-1][iter] = last_value
+                value_preds, action_log_probs, _, _, _ = actor_critic.evaluate_actions(
+                    rollouts.obs[step].view(-1, *obs_shape).to(device),
+                    rollouts.metrics[step].view(-1, *metrics_shape).to(device),
+                    rollouts.actions[step].view(-1, *action_shape).to(device)
+                )
+            rollouts.value_preds[step] = value_preds.view(rollouts.value_preds[step].size()).detach()
+            rollouts.action_log_probs[step] = action_log_probs.view(rollouts.value_preds[step].size()).detach()
+
+        with torch.no_grad():
+            last_value = actor_critic.get_value(
+                rollouts.obs[-1].view(-1, *obs_shape).to(device),
+                rollouts.metrics[-1].view(-1, *metrics_shape).to(device)).detach()
+            rollouts.value_preds[-1] = last_value.view(rollouts.value_preds[-1].size())
 
         actor_critic.cpu()
         discriminator.to(device)
@@ -208,23 +206,21 @@ def gailLearning_mujoco_origin(run_params,
                                            expert_pre_reward,
                                            policy_pre_reward),
                                   time_step=i_update)
-        for iter in range(rollouts.radius):
-            for step in range(nbatch):
-                gail_rewards = discriminator.predict_reward(
-                    rollouts.obs[step][iter].to(device),
-                    rollouts.metrics[step][iter].to(device),
-                    rollouts.actions[step][iter].to(device),
-                    run_params['gamma'],
-                    rollouts.masks[step][iter])
-                rollouts.gail_rewards[step][iter] = gail_rewards
+        for step in range(nbatch):
+            gail_rewards = discriminator.predict_reward(
+                rollouts.obs[step].view(-1, *obs_shape).to(device),
+                rollouts.metrics[step].view(-1, *metrics_shape).to(device),
+                rollouts.actions[step].view(-1, *action_shape).to(device),
+                run_params['gamma'],
+                rollouts.masks[step].view(-1, 1))
+            rollouts.gail_rewards[step] = gail_rewards.view(rollouts.gail_rewards[step].size())
 
-                if iter == rollouts.iter:
-                    for i_env in range(len(run_params['envs_params'])):
-                        if rollouts.masks[step][rollouts.iter][i_env]:
-                            cum_gailrewards[i_env] += rollouts.gail_rewards[step][rollouts.iter][i_env].item()
-                        else:
-                            epgailbuf.append(cum_gailrewards[i_env])
-                            cum_gailrewards[i_env] = .0
+            for i_env in range(len(run_params['envs_params'])):
+                if rollouts.masks[step][rollouts.iter][i_env]:
+                    cum_gailrewards[i_env] += rollouts.gail_rewards[step][rollouts.iter][i_env].item()
+                else:
+                    epgailbuf.append(cum_gailrewards[i_env])
+                    cum_gailrewards[i_env] = .0
 
         # compute returns
         rollouts.compute_returns(run_params['gamma'], run_params['gae_lambda'])
