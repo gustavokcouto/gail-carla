@@ -57,11 +57,32 @@ class CNNBase(nn.Module):
 
         self.obs_processor = ProcessObsFeatures(obs_shape)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
-        
-        self.trunk = nn.Sequential(
+
+        self.head_0 = nn.Sequential(
             nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, 1 + num_outputs)
+            nn.Linear(hidden_size, num_outputs)
+        )
+        self.head_1 = nn.Sequential(
+            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, num_outputs)
+        )
+        self.head_2 = nn.Sequential(
+            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, num_outputs)
+        )
+        self.head_3 = nn.Sequential(
+            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, num_outputs)
+        )
+
+        self.value_head = nn.Sequential(
+            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, 1)
         )
 
         self.logstd = torch.Tensor(logstd)
@@ -72,10 +93,21 @@ class CNNBase(nn.Module):
     def forward(self, obs, metrics):
         obs_features, _ = self.obs_processor(obs)
         metrics_features, _ = self.metrics_processor(metrics)
+        cat_features = torch.cat([obs_features, metrics_features], dim=1)
+        head_outputs = []
+        for output_head in [self.head_0, self.head_1, self.head_2, self.head_3]:
+            head_output = output_head(cat_features)
+            head_output = head_output.unsqueeze(dim=1)
+            head_outputs.append(head_output)
+        head_outputs = torch.cat(head_outputs, dim=1)
 
-        nn_output = self.trunk(torch.cat([obs_features, metrics_features], dim=1))
-        critic = nn_output[...,0].unsqueeze(dim=1)
-        output = nn_output[...,1:]
+        road_options = metrics[:, 3].long()
+        road_options -= 1
+        n_range = torch.arange(head_outputs.size(0))
+        n_range = n_range.to(road_options).long()
+        output = head_outputs[n_range, road_options]
+        critic = self.value_head(cat_features)
+
         if self.activation:
             output[...,0] = torch.tanh(output[...,0])
             output[...,1] = torch.sigmoid(output[...,1])
