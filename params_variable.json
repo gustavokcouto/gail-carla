@@ -23,8 +23,8 @@
     ],
     "env_eval_params": {"host": "192.168.0.4", "port": 2010},
 
-    "num_steps": 7200,
-    "replay_radius": 2,
+    "num_steps": 12000,
+    "replay_radius": 1,
     "lr": 1.0e-4,
     "ppo_epoch": 4,
     "mini_batch_size": 256,
@@ -51,5 +51,5 @@
     "decay": 0.99,
     "gailgamma": 0.0,
     "use_activation": true,
-    "resume_training": true
+    "resume_training": false
 }
