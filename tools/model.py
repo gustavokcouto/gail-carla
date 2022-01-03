@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tools.utils import init
+from torchvision.models.resnet import resnet18, resnet50
 
 
 class Flatten(nn.Module):
@@ -11,11 +12,11 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, metrics_space, action_space, activation, logstd):
+    def __init__(self, obs_shape, metrics_space, action_space, activation, logstd, multi_head):
         super(Policy, self).__init__()
 
         num_outputs = action_space.shape[0]
-        self.base = CNNBase(obs_shape, metrics_space, num_outputs, activation, logstd)
+        self.base = CNNBase(obs_shape, metrics_space, num_outputs, activation, logstd, multi_head)
 
         self.max = torch.Tensor([1, 1])
         self.min = torch.Tensor([-1, 0])
@@ -52,38 +53,48 @@ class Policy(nn.Module):
 
 
 class CNNBase(nn.Module):
-    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, hidden_size=512):
+    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, multi_head, hidden_size=512):
         super(CNNBase, self).__init__()
 
         self.obs_processor = ProcessObsFeatures(obs_shape)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
 
-        self.head_0 = nn.Sequential(
-            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, num_outputs)
-        )
-        self.head_1 = nn.Sequential(
-            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, num_outputs)
-        )
-        self.head_2 = nn.Sequential(
-            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, num_outputs)
-        )
-        self.head_3 = nn.Sequential(
-            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, num_outputs)
-        )
+        self.multi_head = multi_head
 
-        self.value_head = nn.Sequential(
-            nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, 1)
-        )
+        if self.multi_head:
+            self.head_0 = nn.Sequential(
+                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, num_outputs)
+            )
+            self.head_1 = nn.Sequential(
+                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, num_outputs)
+            )
+            self.head_2 = nn.Sequential(
+                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, num_outputs)
+            )
+            self.head_3 = nn.Sequential(
+                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, num_outputs)
+            )
+
+            self.value_head = nn.Sequential(
+                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, 1)
+            )
+
+        else:
+            self.head = nn.Sequential(
+                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, num_outputs + 1)
+            )
 
         self.logstd = torch.Tensor(logstd)
 
@@ -94,19 +105,25 @@ class CNNBase(nn.Module):
         obs_features, _ = self.obs_processor(obs)
         metrics_features, _ = self.metrics_processor(metrics)
         cat_features = torch.cat([obs_features, metrics_features], dim=1)
-        head_outputs = []
-        for output_head in [self.head_0, self.head_1, self.head_2, self.head_3]:
-            head_output = output_head(cat_features)
-            head_output = head_output.unsqueeze(dim=1)
-            head_outputs.append(head_output)
-        head_outputs = torch.cat(head_outputs, dim=1)
 
-        road_options = metrics[:, 3].long()
-        road_options -= 1
-        n_range = torch.arange(head_outputs.size(0))
-        n_range = n_range.to(road_options).long()
-        output = head_outputs[n_range, road_options]
-        critic = self.value_head(cat_features)
+        if self.multi_head:
+            head_outputs = []
+            for output_head in [self.head_0, self.head_1, self.head_2, self.head_3]:
+                head_output = output_head(cat_features)
+                head_output = head_output.unsqueeze(dim=1)
+                head_outputs.append(head_output)
+            head_outputs = torch.cat(head_outputs, dim=1)
+
+            road_options = metrics[:, 3].long()
+            road_options -= 1
+            n_range = torch.arange(head_outputs.size(0))
+            n_range = n_range.to(road_options).long()
+            output = head_outputs[n_range, road_options]
+            critic = self.value_head(cat_features)
+        else:
+            nn_output = self.head(cat_features)
+            critic = nn_output[...,0].unsqueeze(dim=1)
+            output = nn_output[...,1:]
 
         if self.activation:
             output[...,0] = torch.tanh(output[...,0])

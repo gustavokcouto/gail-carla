@@ -191,7 +191,9 @@ def train(params):
         envs.metrics_space,
         envs.action_space,
         params['use_activation'],
-        params['logstd'])
+        params['logstd'],
+        params['multi_head']
+    )
 
     # learn_bc(actor_critic, envs, device, gail_train_loader)
 
