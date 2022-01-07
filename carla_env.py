@@ -162,6 +162,7 @@ class CarlaEnv(gym.Env):
         self._client = carla.Client(host, port)
         self._client.set_timeout(30.0)
         self.env_id = env_id
+        self.town = None
 
         set_sync_mode(self._client, False)
 
@@ -284,13 +285,18 @@ class CarlaEnv(gym.Env):
 
     def set_route(self, route_id=0):
         self.route = self.routes[route_id]
-        self._world = self._client.load_world(self.route['town'])
-        self._map = self._world.get_map()
         self.trajectory = self.route['trajectory']
 
-        set_sync_mode(self._client, True)
-        self._spawn_player()
-        self._setup_sensors()
+        if self.town != self.route['town']:
+            self.town = self.route['town']
+            set_sync_mode(self._client, False)
+            self._client.load_world(self.town)
+            self._world = self._client.load_world(self.route['town'])
+            self._map = self._world.get_map()
+
+            set_sync_mode(self._client, True)
+            self._spawn_player()
+            self._setup_sensors()
 
     def reset(self):
         if len(self._command_planner.route) == 0:
@@ -399,7 +405,8 @@ class CarlaEnv(gym.Env):
             'compass': compass,
             'steer': control.steer,
             'throttle': control.throttle,
-            'brake': control.brake
+            'brake': control.brake,
+            'route_id': self.route_id
         }
 
         self.route_completed = self._waypoint_planner.route_completed()

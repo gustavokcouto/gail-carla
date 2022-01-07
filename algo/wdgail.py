@@ -228,11 +228,19 @@ class Discriminator(nn.Module):
             reward = -(1 - s).log()
             reward = reward.cpu()
 
+            # if self.returns is None:
+            #     self.returns = reward.clone()
+
+            # if update_rms:
+            #     self.returns = self.returns * masks * gamma + reward
+            #     self.ret_rms.update(self.returns.cpu().numpy())
+
+            # return reward / np.sqrt(self.ret_rms.var[0] + 1e-8)
             return reward
 
 
 class ExpertDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_directory, n_routes=1):
+    def __init__(self, dataset_directory, n_routes=1, n_eps=1):
         self.dataset_path = Path(dataset_directory)
         self.length = 0
         self.get_idx = []
@@ -241,14 +249,15 @@ class ExpertDataset(torch.utils.data.Dataset):
         self.trajs_metrics = []
 
         for route_idx in range(n_routes):
-            route_path = self.dataset_path / ('route_%02d' % route_idx)
-            route_df = pd.read_json(route_path / 'episode.json')
-            traj_length = route_df.shape[0]
-            self.length += traj_length
-            for step_idx in range(traj_length):
-                self.get_idx.append((route_idx, step_idx))
-                self.trajs_actions.append(torch.Tensor(route_df.iloc[step_idx]['actions']))
-                self.trajs_metrics.append(torch.Tensor(route_df.iloc[step_idx]['metrics']))
+            for ep_idx in range(n_eps):
+                route_path = self.dataset_path / ('route_%02d' % route_idx) / ('ep_%02d' % ep_idx)
+                route_df = pd.read_json(route_path / 'episode.json')
+                traj_length = route_df.shape[0]
+                self.length += traj_length
+                for step_idx in range(traj_length):
+                    self.get_idx.append((route_idx, ep_idx, step_idx))
+                    self.trajs_actions.append(torch.Tensor(route_df.iloc[step_idx]['actions']))
+                    self.trajs_metrics.append(torch.Tensor(route_df.iloc[step_idx]['metrics']))
 
         self.trajs_actions = torch.stack(self.trajs_actions)
         self.trajs_metrics = torch.stack(self.trajs_metrics)
@@ -258,15 +267,13 @@ class ExpertDataset(torch.utils.data.Dataset):
         return self.length
 
     def __getitem__(self, j):
-        route_idx, i = self.get_idx[j]
+        route_idx, ep_idx, step_idx = self.get_idx[j]
         if self.actual_obs[j] is None:
             # Load only the first time, images in uint8 are supposed to be light
-            rgb = Image.open(self.dataset_path /
-                            'route_{:0>2d}/rgb/{:0>4d}.png'.format(route_idx, i))
-            rgb_left = Image.open(
-                self.dataset_path / 'route_{:0>2d}/rgb_left/{:0>4d}.png'.format(route_idx, i))
-            rgb_right = Image.open(
-                self.dataset_path / 'route_{:0>2d}/rgb_right/{:0>4d}.png'.format(route_idx, i))
+            ep_dir = self.dataset_path / 'route_{:0>2d}/ep_{:0>2d}'.format(route_idx, ep_idx)
+            rgb = Image.open(ep_dir / 'rgb/{:0>4d}.png'.format(step_idx))
+            rgb_left = Image.open(ep_dir / 'rgb_left/{:0>4d}.png'.format(step_idx))
+            rgb_right = Image.open(ep_dir / 'rgb_right/{:0>4d}.png'.format(step_idx))
             rgb = np.transpose(rgb, (2, 0, 1))
             rgb_left = np.transpose(rgb_left, (2, 0, 1))
             rgb_right = np.transpose(rgb_right, (2, 0, 1))
