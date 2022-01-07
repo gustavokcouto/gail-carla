@@ -30,54 +30,55 @@ def gen_trajectories(routes_file=''):
 
     env = EnvMonitor(env, output_path=expert_file_dir)
 
-    for route_id in tqdm.tqdm(range(12)):
+    for route_id in tqdm.tqdm(range(1)):
         env.env.set_route(route_id)
         trajectory = env.env.trajectory
         global_plan_gps, global_plan_world_coord = interpolate_trajectory(env.env._world, trajectory)
-        episode_dir = expert_file_dir / ('route_%02d' % route_id)
-        (episode_dir / 'rgb').mkdir(parents=True)
-        (episode_dir / 'rgb_left').mkdir(parents=True)
-        (episode_dir / 'rgb_right').mkdir(parents=True)
-        (episode_dir / 'topdown').mkdir(parents=True)
-        metrics_ep = []
-        actions_ep = []
+        for ep_id in range(3):
+            episode_dir = expert_file_dir / ('route_%02d' % route_id) / ('ep_%02d' % ep_id)
+            (episode_dir / 'rgb').mkdir(parents=True)
+            (episode_dir / 'rgb_left').mkdir(parents=True)
+            (episode_dir / 'rgb_right').mkdir(parents=True)
+            (episode_dir / 'topdown').mkdir(parents=True)
+            metrics_ep = []
+            actions_ep = []
 
-        i_step = 0
-        _, step_metrics = env.reset()
-        auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
-        while not env.env.route_completed and i_step < ep_max_len:
-            ego_metrics = [
-                env.env.info['gps_x'],
-                env.env.info['gps_y'],
-                env.env.info['compass'],
-                env.env.info['speed']
-            ]
-            action = auto_pilot.run_step(ego_metrics)
+            i_step = 0
+            _, step_metrics = env.reset()
+            auto_pilot = AutoPilot(global_plan_gps, global_plan_world_coord)
+            while not env.env.route_completed and i_step < ep_max_len:
+                ego_metrics = [
+                    env.env.info['gps_x'],
+                    env.env.info['gps_y'],
+                    env.env.info['compass'],
+                    env.env.info['speed']
+                ]
+                action = auto_pilot.run_step(ego_metrics)
+
+                metrics_ep.append(step_metrics)
+                actions_ep.append(action)
+                Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
+                Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
+                Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
+                Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
+
+                _, step_metrics, _, _, _ = env.step(action)
+                i_step += 1
 
             metrics_ep.append(step_metrics)
             actions_ep.append(action)
+
             Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
             Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
             Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
             Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
 
-            _, step_metrics, _, _, _ = env.step(action)
-            i_step += 1
+            ep_df = pd.DataFrame({
+                'actions': actions_ep,
+                'metrics': metrics_ep,
+            })
 
-        metrics_ep.append(step_metrics)
-        actions_ep.append(action)
-
-        Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
-        Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
-        Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
-        Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
-
-        ep_df = pd.DataFrame({
-            'actions': actions_ep,
-            'metrics': metrics_ep,
-        })
-
-        ep_df.to_json(episode_dir / 'episode.json')
+            ep_df.to_json(episode_dir / 'episode.json')
 
 if __name__ == "__main__":
     gen_trajectories(Path('data/routes_training.xml'))
