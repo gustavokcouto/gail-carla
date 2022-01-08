@@ -9,6 +9,7 @@
     "env_ep_length": 2400,
     "trajectory": "routes_training",
     "n_routes": 1,
+    "n_eps": 2,
     "routes": [0],
     "envs_params": [
         {"host": "192.168.0.4", "port": 2000},
@@ -44,8 +45,8 @@
     "gail_eps": 1e-8,
     "gail_betas": [0.9, 0.99],
     "gail_thre": 10,
-    "gail_pre_epoch": 60,
-    "gail_epoch": 12,
+    "gail_pre_epoch": 30,
+    "gail_epoch": 6,
     "gail_max_grad_norm": 0.5,
     "log_interval": 1,
     "eval_interval": 3,

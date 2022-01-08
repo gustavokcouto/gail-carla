@@ -2,7 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import torch
 import numpy as np
 from collections import deque
@@ -72,6 +72,9 @@ def gailLearning_mujoco_origin(run_params,
     epgailbuf = deque(maxlen=10)
 
     episode_rewards = deque(maxlen=10)
+    routes_rewards = {}
+    for route_idx in run_params['routes']:
+        routes_rewards[route_idx] = deque(maxlen=10)
 
     cum_gailrewards = [.0 for _ in range(len(run_params['envs_params']))]
 
@@ -128,6 +131,7 @@ def gailLearning_mujoco_origin(run_params,
                     maybeepinfo = info.get('episode')
                     if maybeepinfo:
                         epinfos.append(maybeepinfo)
+                        routes_rewards[info['route_id']].append(info['episode']['r'])
                         episode_rewards.append(info['episode']['r'])
 
                 # If done then clean the history of observations.
@@ -300,6 +304,8 @@ def gailLearning_mujoco_origin(run_params,
                                               policy_eval_reward
                                               ),
                                      time_step=i_update)
+
+        utli.record_routes_rewards(routes_rewards, i_update)
 
         time_diff = time.time() - start
         torch.save([actor_critic.state_dict(), discriminator.state_dict(), i_update, time_diff], model_path)

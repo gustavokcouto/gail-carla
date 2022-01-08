@@ -162,6 +162,7 @@ def train(params):
         ExpertDataset(
             dataset_directory,
             n_routes=params['n_routes'],
+            n_eps=params['n_eps']
         ),
         batch_size=params['gail_batch_size'],
         shuffle=True,
