@@ -32,9 +32,9 @@ def make_env(env_host, env_port, ep_length, route_file, env_id, route_id):
     return _thunk
 
 
-def make_vec_envs(envs_params, device, ep_length, route_file, n_routes):
+def make_vec_envs(envs_params, device, ep_length, route_file, routes):
     envs = [
-        make_env(env_params['host'], env_params['port'], ep_length, route_file, 'train_env_{}'.format(env_id), env_id % n_routes)
+        make_env(env_params['host'], env_params['port'], ep_length, route_file, 'train_env_{}'.format(env_id), routes[env_id % len(routes)])
         for env_id, env_params in enumerate(envs_params)
     ]
 

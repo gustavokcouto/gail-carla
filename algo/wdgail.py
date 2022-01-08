@@ -240,7 +240,7 @@ class Discriminator(nn.Module):
 
 
 class ExpertDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_directory, n_routes=1, n_eps=1):
+    def __init__(self, dataset_directory, routes, n_eps=1):
         self.dataset_path = Path(dataset_directory)
         self.length = 0
         self.get_idx = []
@@ -248,7 +248,7 @@ class ExpertDataset(torch.utils.data.Dataset):
         self.trajs_actions = []
         self.trajs_metrics = []
 
-        for route_idx in range(n_routes):
+        for route_idx in routes:
             for ep_idx in range(n_eps):
                 route_path = self.dataset_path / ('route_%02d' % route_idx) / ('ep_%02d' % ep_idx)
                 route_df = pd.read_json(route_path / 'episode.json')

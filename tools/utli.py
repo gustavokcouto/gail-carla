@@ -61,21 +61,21 @@ def recordDisLossResults(results, time_step):
 
 
 results4train_gail = {
-    'Train reward': 0.0,
-    'Train steps': 0,
-    'Expert reward': 0.0,
-    'Eval steps': 0.0,
-    'Eval reward': 0.0,
+    'Train_reward': 0.0,
+    'Train_steps': 0,
+    'Expert_reward': 0.0,
+    'Eval_steps': 0.0,
+    'Eval_reward': 0.0,
     'disc_eval_loss': 0.0,
     'expert_eval_reward': 0.0,
     'policy_eval_reward': 0.0
 }
 def recordTrainResults_gail(results, time_step):
-    results4train_gail['Train reward'] = results[0]
-    results4train_gail['Train steps'] = results[1]
-    results4train_gail['Expert reward'] = results[2]
-    results4train_gail['Eval steps'] = results[3]
-    results4train_gail['Eval reward'] = results[4]
+    results4train_gail['Train_reward'] = results[0]
+    results4train_gail['Train_steps'] = results[1]
+    results4train_gail['Expert_reward'] = results[2]
+    results4train_gail['Eval_steps'] = results[3]
+    results4train_gail['Eval_reward'] = results[4]
     results4train_gail['disc_eval_loss'] = results[5]
     results4train_gail['expert_eval_reward'] = results[6]
     results4train_gail['policy_eval_reward'] = results[7]
@@ -102,9 +102,8 @@ def write2tensorboard(results, time_step):
 def Log_save_name4gail(run_params):
 
     save_name = run_params['algo'] + '_' + run_params['env_name'] + \
-                '_seed_{}_n_routes_{}_gail_{}_{}'\
+                '_seed_{}_gail_{}_{}'\
                     .format(run_params['seed'],
-                            run_params['n_routes'],
                             run_params['gail_batch_size'],
                             run_params['gail_epoch']
                             )

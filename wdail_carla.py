@@ -161,7 +161,7 @@ def train(params):
     gail_train_loader = torch.utils.data.DataLoader(
         ExpertDataset(
             dataset_directory,
-            n_routes=params['n_routes'],
+            routes=params['routes'],
             n_eps=params['n_eps']
         ),
         batch_size=params['gail_batch_size'],
@@ -174,7 +174,7 @@ def train(params):
 
     env_route_file = Path('data/' + params['trajectory'] + '.xml')
     envs = make_vec_envs(params['envs_params'], device,
-                         params['env_ep_length'], env_route_file, params['n_routes'])
+                         params['env_ep_length'], env_route_file, params['routes'])
     env_eval = CarlaEnv(
         params['env_eval_params']['host'],
         params['env_eval_params']['port'],
