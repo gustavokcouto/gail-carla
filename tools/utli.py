@@ -1,7 +1,5 @@
 import pandas as pd
-import os
 import numpy as np
-import torch
 
 
 # writer = SummaryWriter()
@@ -83,6 +81,16 @@ def recordTrainResults_gail(results, time_step):
     results4train_gail['policy_eval_reward'] = results[7]
 
     write2tensorboard(results=results4train_gail, time_step=time_step)
+
+
+def record_routes_rewards(routes_rewards, time_step):
+    for route_idx in routes_rewards.keys():
+        title = 'route_{:0>2d}_max_reward'.format(route_idx)
+        result = np.max(routes_rewards[route_idx])
+        writer.add_scalar(title, result, time_step)
+        title = 'route_{:0>2d}_min_reward'.format(route_idx)
+        result = np.min(routes_rewards[route_idx])
+        writer.add_scalar(title, result, time_step)
 
 
 def write2tensorboard(results, time_step):
