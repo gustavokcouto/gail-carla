@@ -84,13 +84,14 @@ def recordTrainResults_gail(results, time_step):
 
 
 def record_routes_rewards(routes_rewards, time_step):
+    routes_metrics = {}
     for route_idx in routes_rewards.keys():
-        title = 'route_{:0>2d}_max_reward'.format(route_idx)
-        result = np.max(routes_rewards[route_idx])
-        writer.add_scalar(title, result, time_step)
-        title = 'route_{:0>2d}_min_reward'.format(route_idx)
-        result = np.min(routes_rewards[route_idx])
-        writer.add_scalar(title, result, time_step)
+        metric_id = 'route_{:0>2d}_max_reward'.format(route_idx)
+        routes_metrics[metric_id] = np.max(routes_rewards[route_idx])
+        metric_id = 'route_{:0>2d}_min_reward'.format(route_idx)
+        routes_metrics[metric_id] = np.min(routes_rewards[route_idx])
+
+    write2tensorboard(routes_metrics, time_step)
 
 
 def write2tensorboard(results, time_step):
@@ -102,9 +103,8 @@ def write2tensorboard(results, time_step):
 def Log_save_name4gail(run_params):
 
     save_name = run_params['algo'] + '_' + run_params['env_name'] + \
-                '_seed_{}_n_routes_{}_gail_{}_{}'\
+                '_seed_{}_gail_{}_{}'\
                     .format(run_params['seed'],
-                            run_params['n_routes'],
                             run_params['gail_batch_size'],
                             run_params['gail_epoch']
                             )

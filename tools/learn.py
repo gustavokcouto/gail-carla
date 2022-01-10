@@ -2,7 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 import torch
 import numpy as np
 from collections import deque
