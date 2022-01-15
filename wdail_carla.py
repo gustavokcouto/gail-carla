@@ -172,6 +172,21 @@ def train(params):
         # pin_memory=True
         )
 
+    gail_val_loader = torch.utils.data.DataLoader(
+        ExpertDataset(
+            dataset_directory,
+            routes=params['routes'],
+            n_eps=params['n_eps_val'],
+            start_ep=params['n_eps']
+        ),
+        batch_size=params['gail_batch_size'],
+        shuffle=True,
+        drop_last=True,
+        # num_workers=8,
+        # persistent_workers=True,
+        # pin_memory=True
+        )
+
     env_route_file = Path('data/' + params['trajectory'] + '.xml')
     envs = make_vec_envs(params['envs_params'], device,
                          params['env_ep_length'], env_route_file, params['routes'])
@@ -193,7 +208,8 @@ def train(params):
         envs.action_space,
         params['use_activation'],
         params['logstd'],
-        params['multi_head']
+        params['multi_head'],
+        params['resnet']
     )
 
     # learn_bc(actor_critic, envs, device, gail_train_loader)
@@ -224,6 +240,7 @@ def train(params):
         params['gail_eps'],
         params['gail_betas'],
         params['gail_max_grad_norm'],
+        params['consistency_term']
     )
 
     model = gailLearning_mujoco_origin(run_params=run_params,
@@ -233,6 +250,7 @@ def train(params):
                                        agent=agent,
                                        discriminator=discr,
                                        gail_train_loader=gail_train_loader,
+                                       gail_val_loader=gail_val_loader,
                                        device=device,
                                        utli=utli)
 

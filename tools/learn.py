@@ -23,6 +23,7 @@ def gailLearning_mujoco_origin(run_params,
                                agent,
                                discriminator,
                                gail_train_loader,
+                               gail_val_loader,
                                device,
                                utli
                                ):
@@ -166,7 +167,7 @@ def gailLearning_mujoco_origin(run_params,
 
         # gail
         disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
-            gail_train_loader, rollouts)
+            gail_val_loader, rollouts)
         gail_epoch = run_params['gail_epoch']
         if i_update < run_params['gail_thre']:
             gail_epoch += (run_params['gail_pre_epoch'] - run_params['gail_epoch']) * \
@@ -178,6 +179,7 @@ def gailLearning_mujoco_origin(run_params,
         expert_rewards = []
         dis_losses = []
         dis_gps = []
+        dis_cts = []
         expert_losses = []
         policy_losses = []
         for _ in range(gail_epoch):
@@ -187,6 +189,7 @@ def gailLearning_mujoco_origin(run_params,
                 expert_reward_mean,
                 dis_loss,
                 dis_gp,
+                dis_ct,
                 expert_loss,
                 policy_loss
             ) = discriminator.update(
@@ -196,6 +199,7 @@ def gailLearning_mujoco_origin(run_params,
             expert_rewards.append(expert_reward_mean)
             dis_losses.append(dis_loss)
             dis_gps.append(dis_gp)
+            dis_cts.append(dis_ct)
             expert_losses.append(expert_loss)
             policy_losses.append(policy_loss)
 
@@ -204,6 +208,7 @@ def gailLearning_mujoco_origin(run_params,
                                            np.mean(np.array(expert_rewards)),
                                            np.mean(np.array(dis_losses)),
                                            np.mean(np.array(dis_gps)),
+                                           np.mean(np.array(dis_cts)),
                                            np.mean(np.array(expert_losses)),
                                            np.mean(np.array(policy_losses)),
                                            disc_pre_loss,
@@ -275,7 +280,7 @@ def gailLearning_mujoco_origin(run_params,
             actor_critic.cpu()
             discriminator.to(device)
             disc_eval_loss, expert_eval_reward, policy_eval_reward = discriminator.compute_loss(
-                gail_train_loader, rollout_eval, batch_size=steps_eval-1)
+                gail_val_loader, rollout_eval, batch_size=steps_eval-1)
 
         utli.recordLossResults(results=(value_loss,
                                         action_loss,
