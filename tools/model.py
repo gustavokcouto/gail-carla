@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tools.utils import init
 from torchvision.models.resnet import resnet18, resnet50
+from torchvision import transforms
 
 
 class Flatten(nn.Module):
@@ -12,11 +13,11 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, metrics_space, action_space, activation, logstd, multi_head):
+    def __init__(self, obs_shape, metrics_space, action_space, activation, logstd, multi_head, resnet):
         super(Policy, self).__init__()
 
         num_outputs = action_space.shape[0]
-        self.base = CNNBase(obs_shape, metrics_space, num_outputs, activation, logstd, multi_head)
+        self.base = CNNBase(obs_shape, metrics_space, num_outputs, activation, logstd, multi_head, resnet)
 
         self.max = torch.Tensor([1, 1])
         self.min = torch.Tensor([-1, 0])
@@ -53,13 +54,19 @@ class Policy(nn.Module):
 
 
 class CNNBase(nn.Module):
-    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, multi_head, hidden_size=512):
+    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, multi_head, resnet, hidden_size=512):
         super(CNNBase, self).__init__()
 
-        self.obs_processor = ProcessObsFeatures(obs_shape)
+        self.resnet = resnet
+        self.multi_head = multi_head
+
+        if resnet:
+            self.obs_processor = ProcessObsFeaturesResnet(obs_shape)
+        else:
+            self.obs_processor = ProcessObsFeatures(obs_shape)
+
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
 
-        self.multi_head = multi_head
 
         if self.multi_head:
             self.head_0 = nn.Sequential(
@@ -99,7 +106,6 @@ class CNNBase(nn.Module):
         self.logstd = torch.Tensor(logstd)
 
         self.activation = activation
-        self.train()
 
     def forward(self, obs, metrics):
         obs_features, _ = self.obs_processor(obs)
@@ -132,25 +138,42 @@ class CNNBase(nn.Module):
         logstd = self.logstd.to(output)
         logstd = logstd + zeros
         return critic, output, logstd
-
-
+    
 
 class ProcessObsFeatures(nn.Module):
-    def __init__(self, obs_shape):
+    def __init__(self, obs_shape, dropout=False):
         super(ProcessObsFeatures, self).__init__()
         C, H, W = obs_shape
 
-        self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(32, 64, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 4, stride=2),
-            nn.LeakyReLU(0.2),
-            Flatten()
-        )
+        self.dropout = dropout
+        if not self.dropout:
+            self.main = nn.Sequential(
+                nn.Conv2d(C, 32, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                nn.Conv2d(32, 64, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                nn.Conv2d(64, 128, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                nn.Conv2d(128, 256, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                Flatten()
+            )
+        else:
+            self.main = nn.Sequential(
+                nn.Conv2d(C, 32, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                nn.Conv2d(32, 64, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                nn.Conv2d(64, 128, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                nn.Conv2d(128, 256, 4, stride=2),
+                nn.LeakyReLU(0.2),
+                nn.Dropout(0.5),
+                Flatten()
+            )
 
         for _ in range(4):
             H = (H - 4)//2 + 1
@@ -226,3 +249,36 @@ class ProcessAction(nn.Module):
         action_transformed.requires_grad = True
 
         return action_transformed, action_transformed
+
+
+class ProcessObsFeaturesResnet(nn.Module):
+    def __init__(self, obs_shape):
+        super(ProcessObsFeaturesResnet, self).__init__()
+
+        self.main = resnet18(pretrained=True)
+
+        for param in self.main.parameters():
+            param.requires_grad = False
+
+        self.main.fc = nn.Linear(512, 1000)
+        for param in self.main.fc.parameters():
+            param.requires_grad = True
+
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        # Get image dim
+        self.output_dim = 1000 * 3
+    def forward(self, obs):
+        # scale observation
+        obs_transformed = obs / 255
+        obs_left = self.normalize(obs_transformed[:, :3])
+        obs_center = self.normalize(obs_transformed[:, 3:6])
+        obs_right = self.normalize(obs_transformed[:, 6:])
+
+        left_feat = self.main(obs_left)
+        center_feat = self.main(obs_center)
+        right_feat = self.main(obs_right)
+
+        obs_features = torch.cat([left_feat, center_feat, right_feat], dim=1)
+
+        return obs_features, obs_features
