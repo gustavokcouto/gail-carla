@@ -15,12 +15,13 @@ from common.running_mean_std import RunningMeanStd
 
 
 class Discriminator(nn.Module):
-    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None):
+    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None, ct=False):
         super(Discriminator, self).__init__()
         self.device = device
-        C, H, W = state_shape
+        self.ct = ct
+        self.ct_lambda = 2.0
 
-        self.obs_processor = ProcessObsFeatures(state_shape)
+        self.obs_processor = ProcessObsFeatures(state_shape, dropout=self.ct)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         self.action_processor = ProcessAction(action_space.shape[0])
 
@@ -28,8 +29,9 @@ class Discriminator(nn.Module):
             nn.Linear(
                 self.obs_processor.output_dim + self.metrics_processor.output_dim + self.action_processor.output_dim, hidden_dim),
             nn.LeakyReLU(0.2),
-            nn.Linear(hidden_dim, 1)
         )
+
+        self.last_layer = nn.Linear(hidden_dim, 1)
 
         self.train()
 
@@ -38,6 +40,11 @@ class Discriminator(nn.Module):
                                     lr=lr, betas=betas, eps=eps)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
+
+    def fc_net(self, input):
+        output = self.trunk(input)
+        output = self.last_layer(output)
+        return output
 
     def compute_grad_pen(self,
                          expert_state,
@@ -72,7 +79,7 @@ class Discriminator(nn.Module):
         mixup_data = torch.cat(
             [mixup_state_features, mixup_metrics_features, mixup_action_features], dim=1)
 
-        disc = self.trunk(mixup_data)
+        disc = self.fc_net(mixup_data)
         ones = torch.ones(disc.size()).to(disc.device)
 
         grad = autograd.grad(
@@ -90,6 +97,30 @@ class Discriminator(nn.Module):
         grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
         return grad_pen
 
+    def compute_consistency_term(self,
+                                 expert_state,
+                                 expert_metrics,
+                                 expert_action,
+                                 m_tag=0):
+        exp_state_features, _ = self.obs_processor(expert_state)
+        exp_metrics_features, _ = self.metrics_processor(expert_metrics)
+        exp_action_features, _ = self.action_processor(expert_action)
+
+        disc_t1 = self.trunk(
+            torch.cat([exp_state_features, exp_metrics_features, exp_action_features], dim=1))
+        disc1 = self.last_layer(disc_t1)
+
+        exp_state_features, _ = self.obs_processor(expert_state)
+        exp_metrics_features, _ = self.metrics_processor(expert_metrics)
+        exp_action_features, _ = self.action_processor(expert_action)
+        disc_t2 = self.trunk(
+            torch.cat([exp_state_features, exp_metrics_features, exp_action_features], dim=1))
+        disc2 = self.last_layer(disc_t2)
+
+        consistency_term = (disc1 - disc2).norm(2, dim=1) + 0.1 * \
+            (disc_t1 - disc_t2).norm(2, dim=1) - m_tag
+        return consistency_term.mean()
+
     def update(self, expert_loader, rollouts):
         self.train()
 
@@ -101,6 +132,7 @@ class Discriminator(nn.Module):
         policy_ac_loss = 0
         g_loss = 0.0
         gp = 0.0
+        ct = 0.0
         n = 0
         policy_reward = 0
         expert_reward = 0
@@ -116,7 +148,7 @@ class Discriminator(nn.Module):
             policy_metrics_features, _ = self.metrics_processor(policy_metrics)
             policy_action_features, _ = self.action_processor(policy_action)
 
-            policy_d = self.trunk(
+            policy_d = self.fc_net(
                 torch.cat([policy_state_features,  policy_metrics_features, policy_action_features], dim=1))
             policy_reward += policy_d.sum().item()
 
@@ -130,16 +162,10 @@ class Discriminator(nn.Module):
             expert_metrics_features, _ = self.metrics_processor(expert_metrics)
             expert_action_features, _ = self.action_processor(expert_action)
 
-            expert_d = self.trunk(
+            expert_d = self.fc_net(
                 torch.cat([expert_state_features, expert_metrics_features, expert_action_features], dim=1))
             expert_reward += expert_d.sum().item()
 
-            # expert_loss = F.binary_cross_entropy_with_logits(
-            #     expert_d,
-            #     torch.ones(expert_d.size()).to(self.device))
-            # policy_loss = F.binary_cross_entropy_with_logits(
-            #     policy_d,
-            #     torch.zeros(policy_d.size()).to(self.device))
             expert_loss = torch.mean(torch.tanh(expert_d)).to(self.device)
             policy_loss = torch.mean(torch.tanh(policy_d)).to(self.device)
 
@@ -151,20 +177,28 @@ class Discriminator(nn.Module):
             grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
                                              policy_state, policy_metrics, policy_action)
 
-            # loss += (gail_loss + grad_pen).item()
-            loss += (-wd + grad_pen).item() * n_samples
+            if self.ct:
+                cons_term = self.compute_consistency_term(expert_state, expert_metrics, expert_action)
+                loss += (-wd + grad_pen + self.ct_lambda * cons_term).item() * n_samples
+                ct += (cons_term).item() * n_samples
+            else:
+                loss += (-wd + grad_pen).item() * n_samples
+
             g_loss += (wd).item() * n_samples
             gp += (grad_pen).item() * n_samples
             n += n_samples
 
             self.optimizer.zero_grad()
-            # (gail_loss + grad_pen).backward()
-            (-wd + grad_pen).backward()
+            if self.ct:
+                (-wd + grad_pen + self.ct_lambda * cons_term).backward()
+            else:
+                (-wd + grad_pen).backward()
+
             nn.utils.clip_grad_norm_(
                 self.parameters(), self.max_grad_norm)
             self.optimizer.step()
 
-        return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, expert_ac_loss / n, policy_ac_loss / n
+        return loss / n, policy_reward/n, expert_reward/n, g_loss/n, gp/n, ct/n, expert_ac_loss / n, policy_ac_loss / n
 
     def compute_loss(self, expert_loader, rollouts, batch_size=None):
         with torch.no_grad():
@@ -187,7 +221,7 @@ class Discriminator(nn.Module):
                 policy_metrics_features, _ = self.metrics_processor(policy_metrics)
                 policy_action_features, _ = self.action_processor(policy_action)
 
-                policy_d = self.trunk(
+                policy_d = self.fc_net(
                     torch.cat([policy_state_features, policy_metrics_features, policy_action_features], dim=1))
 
                 expert_state, expert_metrics, expert_action = expert_batch
@@ -199,7 +233,7 @@ class Discriminator(nn.Module):
                 expert_metrics_features, _ = self.metrics_processor(expert_metrics)
                 expert_action_features, _ = self.action_processor(expert_action)
 
-                expert_d = self.trunk(
+                expert_d = self.fc_net(
                     torch.cat([expert_state_features, expert_metrics_features, expert_action_features], dim=1))
                 expert_loss = torch.tanh(expert_d)
                 policy_loss = torch.tanh(policy_d)
@@ -222,7 +256,7 @@ class Discriminator(nn.Module):
             metrics_features, _ = self.metrics_processor(metrics)
             action_features, _ = self.action_processor(action)
 
-            d = self.trunk(
+            d = self.fc_net(
                 torch.cat([state_features, metrics_features, action_features], dim=1))
             s = torch.sigmoid(d)
             reward = -(1 - s).log()
@@ -240,7 +274,7 @@ class Discriminator(nn.Module):
 
 
 class ExpertDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_directory, routes=1, n_eps=1):
+    def __init__(self, dataset_directory, routes=1, n_eps=1, start_ep=0):
         self.dataset_path = Path(dataset_directory)
         self.length = 0
         self.get_idx = []
@@ -249,7 +283,7 @@ class ExpertDataset(torch.utils.data.Dataset):
         self.trajs_metrics = []
 
         for route_idx in routes:
-            for ep_idx in range(n_eps):
+            for ep_idx in range(start_ep, start_ep + n_eps):
                 route_path = self.dataset_path / ('route_%02d' % route_idx) / ('ep_%02d' % ep_idx)
                 route_df = pd.read_json(route_path / 'episode.json')
                 traj_length = route_df.shape[0]
