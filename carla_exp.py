@@ -30,11 +30,11 @@ def gen_trajectories(routes_file=''):
 
     env = EnvMonitor(env, output_path=expert_file_dir)
 
-    for route_id in tqdm.tqdm(range(1)):
+    for route_id in tqdm.tqdm([0]):
         env.env.set_route(route_id)
         trajectory = env.env.trajectory
         global_plan_gps, global_plan_world_coord = interpolate_trajectory(env.env._world, trajectory)
-        for ep_id in range(3):
+        for ep_id in range(5):
             episode_dir = expert_file_dir / ('route_%02d' % route_id) / ('ep_%02d' % ep_id)
             (episode_dir / 'rgb').mkdir(parents=True)
             (episode_dir / 'rgb_left').mkdir(parents=True)
