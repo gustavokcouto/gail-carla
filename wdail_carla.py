@@ -240,7 +240,8 @@ def train(params):
         params['gail_eps'],
         params['gail_betas'],
         params['gail_max_grad_norm'],
-        params['consistency_term']
+        params['consistency_term'],
+        params['gail_resnet']
     )
 
     model = gailLearning_mujoco_origin(run_params=run_params,

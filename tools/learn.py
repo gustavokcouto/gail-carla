@@ -166,14 +166,16 @@ def gailLearning_mujoco_origin(run_params,
         discriminator.to(device)
 
         # gail
-        disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
-            gail_val_loader, rollouts)
         gail_epoch = run_params['gail_epoch']
         if i_update < run_params['gail_thre']:
             gail_epoch += (run_params['gail_pre_epoch'] - run_params['gail_epoch']) * \
                 (run_params['gail_thre'] - (i_update - 1)) / \
                 run_params['gail_thre']  # Warm up
             gail_epoch = int(gail_epoch)
+
+        disc_pre_loss, expert_pre_reward, policy_pre_reward = discriminator.compute_loss(
+            gail_val_loader, rollouts)
+
         dis_total_losses = []
         policy_rewards = []
         expert_rewards = []
@@ -203,18 +205,6 @@ def gailLearning_mujoco_origin(run_params,
             expert_losses.append(expert_loss)
             policy_losses.append(policy_loss)
 
-        utli.recordDisLossResults(results=(np.mean(np.array(dis_total_losses)),
-                                           np.mean(np.array(policy_rewards)),
-                                           np.mean(np.array(expert_rewards)),
-                                           np.mean(np.array(dis_losses)),
-                                           np.mean(np.array(dis_gps)),
-                                           np.mean(np.array(dis_cts)),
-                                           np.mean(np.array(expert_losses)),
-                                           np.mean(np.array(policy_losses)),
-                                           disc_pre_loss,
-                                           expert_pre_reward,
-                                           policy_pre_reward),
-                                  time_step=i_update)
         for step in range(nbatch):
             gail_rewards = discriminator.predict_reward(
                 rollouts.obs[step].view(-1, *obs_shape).to(device),
@@ -230,6 +220,25 @@ def gailLearning_mujoco_origin(run_params,
                 else:
                     epgailbuf.append(cum_gailrewards[i_env])
                     cum_gailrewards[i_env] = .0
+
+        disc_after_loss, expert_after_reward, policy_after_reward = discriminator.compute_loss(
+            gail_val_loader, rollouts)
+
+        utli.recordDisLossResults(results=(np.mean(np.array(dis_total_losses)),
+                                           np.mean(np.array(policy_rewards)),
+                                           np.mean(np.array(expert_rewards)),
+                                           np.mean(np.array(dis_losses)),
+                                           np.mean(np.array(dis_gps)),
+                                           np.mean(np.array(dis_cts)),
+                                           np.mean(np.array(expert_losses)),
+                                           np.mean(np.array(policy_losses)),
+                                           disc_pre_loss,
+                                           expert_pre_reward,
+                                           policy_pre_reward,
+                                           disc_after_loss,
+                                           expert_after_reward,
+                                           policy_after_reward),
+                                  time_step=i_update)
 
         # compute returns
         rollouts.compute_returns(run_params['gamma'], run_params['gae_lambda'])
@@ -250,9 +259,9 @@ def gailLearning_mujoco_origin(run_params,
             obs, metrics = env_eval.reset()
             steps_eval = 0
             while not done:
-                obs = torch.from_numpy(obs).float().to(device)
+                obs = obs.to(device)
                 obs = torch.stack([obs])
-                metrics = torch.from_numpy(metrics).float().to(device)
+                metrics = metrics.to(device)
                 metrics = torch.stack([metrics])
                 with torch.no_grad():
                     value, actions, action_log_prob = actor_critic.act(
@@ -271,9 +280,7 @@ def gailLearning_mujoco_origin(run_params,
                 if maybeepinfo:
                     eval_reward = info['episode']['r']
 
-            obs = torch.from_numpy(obs).float()
             obs = torch.stack([obs])
-            metrics = torch.from_numpy(metrics).float()
             metrics = torch.stack([metrics])
             rollout_eval.obs[steps_eval][rollout_eval.iter].copy_(obs.cpu())
             rollout_eval.metrics[steps_eval][rollout_eval.iter].copy_(metrics.cpu())
@@ -327,7 +334,6 @@ def gailLearning_mujoco_origin(run_params,
                         int(total_num_steps / (end - start)),
                         len(episode_rewards), np.mean(episode_rewards),
                         np.median(episode_rewards), np.min(episode_rewards),
-                        np.max(episode_rewards), dist_entropy, value_loss,
-                        action_loss))
+                        np.max(episode_rewards)))
 
     return 0
