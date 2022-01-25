@@ -6,8 +6,9 @@ import torch
 import torch.nn as nn
 import torch.utils.data
 from torch import autograd
+from torchvision import transforms
 
-from tools.model import ProcessObsFeatures, ProcessMetrics, ProcessAction
+from tools.model import ProcessObsFeatures, ProcessMetrics, ProcessAction, ProcessObsFeaturesResnet
 import torch.optim as optim
 from PIL import Image
 
@@ -15,13 +16,15 @@ from common.running_mean_std import RunningMeanStd
 
 
 class Discriminator(nn.Module):
-    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None, ct=False):
+    def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None, ct=False, resnet=False):
         super(Discriminator, self).__init__()
         self.device = device
         self.ct = ct
         self.ct_lambda = 2.0
-
-        self.obs_processor = ProcessObsFeatures(state_shape, dropout=self.ct)
+        if resnet:
+            self.obs_processor = ProcessObsFeaturesResnet(state_shape)
+        else:
+            self.obs_processor = ProcessObsFeatures(state_shape)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         self.action_processor = ProcessAction(action_space.shape[0])
 
@@ -32,8 +35,6 @@ class Discriminator(nn.Module):
         )
 
         self.last_layer = nn.Linear(hidden_dim, 1)
-
-        self.train()
 
         self.max_grad_norm = max_grad_norm
         self.optimizer = optim.Adam(self.parameters(),
@@ -122,8 +123,6 @@ class Discriminator(nn.Module):
         return consistency_term.mean()
 
     def update(self, expert_loader, rollouts):
-        self.train()
-
         policy_data_generator = rollouts.feed_forward_generator(
             None, mini_batch_size=expert_loader.batch_size, only_last_cycle=True)
 
@@ -203,14 +202,14 @@ class Discriminator(nn.Module):
     def compute_loss(self, expert_loader, rollouts, batch_size=None):
         with torch.no_grad():
             policy_data_generator = rollouts.feed_forward_generator(
-                None, mini_batch_size=expert_loader.batch_size, batch_size=batch_size)
-            total_loss = 0
-            policy_reward = 0
-            expert_reward = 0
+                None, mini_batch_size=expert_loader.batch_size, batch_size=batch_size, only_last_cycle=True)
 
+            expert_ac_loss = 0
+            policy_ac_loss = 0
+            g_loss = 0.0
             n = 0
             for expert_batch, policy_batch in zip(expert_loader,
-                                                  policy_data_generator):
+                                                policy_data_generator):
                 policy_state, policy_metrics, policy_action = policy_batch[
                     0], policy_batch[1], policy_batch[2]
                 policy_state = policy_state.to(self.device)
@@ -235,23 +234,24 @@ class Discriminator(nn.Module):
 
                 expert_d = self.fc_net(
                     torch.cat([expert_state_features, expert_metrics_features, expert_action_features], dim=1))
-                expert_loss = torch.tanh(expert_d)
-                policy_loss = torch.tanh(policy_d)
-                expert_reward += expert_loss.sum().item()
-                policy_reward += policy_loss.sum().item()
+
+                expert_loss = torch.mean(torch.tanh(expert_d))
+                policy_loss = torch.mean(torch.tanh(policy_d))
+
+                n_samples = policy_state.shape[0]
+                expert_ac_loss += (expert_loss).item() * n_samples
+                policy_ac_loss += (policy_loss).item() * n_samples
                 wd = expert_loss - policy_loss
-                total_loss += wd.sum().item()
-                n += policy_state.shape[0]
 
-            if n == 0:
-                return total_loss, expert_reward, policy_reward
+                g_loss += (wd).item() * n_samples
+                n += n_samples
+        if n == 0:
+            return g_loss, expert_ac_loss, policy_ac_loss
 
-            return total_loss/n, expert_reward/n, policy_reward/n
+        return g_loss/n, expert_ac_loss/n, policy_ac_loss/n
 
     def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
         with torch.no_grad():
-            self.eval()
-
             state_features, _ = self.obs_processor(state)
             metrics_features, _ = self.metrics_processor(metrics)
             action_features, _ = self.action_processor(action)
@@ -296,7 +296,9 @@ class ExpertDataset(torch.utils.data.Dataset):
         self.trajs_actions = torch.stack(self.trajs_actions)
         self.trajs_metrics = torch.stack(self.trajs_metrics)
         self.actual_obs = [None for _ in range(self.length)]
-
+        self.preprocess = transforms.Compose([
+            transforms.ToTensor()
+        ])
     def __len__(self):
         return self.length
 
@@ -308,12 +310,15 @@ class ExpertDataset(torch.utils.data.Dataset):
             rgb = Image.open(ep_dir / 'rgb/{:0>4d}.png'.format(step_idx))
             rgb_left = Image.open(ep_dir / 'rgb_left/{:0>4d}.png'.format(step_idx))
             rgb_right = Image.open(ep_dir / 'rgb_right/{:0>4d}.png'.format(step_idx))
-            rgb = np.transpose(rgb, (2, 0, 1))
-            rgb_left = np.transpose(rgb_left, (2, 0, 1))
-            rgb_right = np.transpose(rgb_right, (2, 0, 1))
-            obs = np.concatenate((rgb, rgb_left, rgb_right))
+            rgb = rgb.convert("RGB")
+            rgb_left = rgb_left.convert("RGB")
+            rgb_right = rgb_right.convert("RGB")
+            rgb = self.preprocess(rgb)
+            rgb_left = self.preprocess(rgb_left)
+            rgb_right = self.preprocess(rgb_right)
+            obs = torch.cat([rgb, rgb_left, rgb_right])
             self.actual_obs[j] = obs
         else:
             obs = self.actual_obs[j]
 
-        return torch.from_numpy(obs).float(), self.trajs_metrics[j], self.trajs_actions[j]
+        return obs, self.trajs_metrics[j], self.trajs_actions[j]

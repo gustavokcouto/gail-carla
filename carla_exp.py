@@ -30,11 +30,11 @@ def gen_trajectories(routes_file=''):
 
     env = EnvMonitor(env, output_path=expert_file_dir)
 
-    for route_id in tqdm.tqdm([0]):
+    for route_id in [0]:
         env.env.set_route(route_id)
         trajectory = env.env.trajectory
         global_plan_gps, global_plan_world_coord = interpolate_trajectory(env.env._world, trajectory)
-        for ep_id in range(5):
+        for ep_id in tqdm.tqdm(range(30)):
             episode_dir = expert_file_dir / ('route_%02d' % route_id) / ('ep_%02d' % ep_id)
             (episode_dir / 'rgb').mkdir(parents=True)
             (episode_dir / 'rgb_left').mkdir(parents=True)
@@ -55,7 +55,7 @@ def gen_trajectories(routes_file=''):
                 ]
                 action = auto_pilot.run_step(ego_metrics)
 
-                metrics_ep.append(step_metrics)
+                metrics_ep.append(step_metrics.numpy())
                 actions_ep.append(action)
                 Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
                 Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
@@ -65,7 +65,7 @@ def gen_trajectories(routes_file=''):
                 _, step_metrics, _, _, _ = env.step(action)
                 i_step += 1
 
-            metrics_ep.append(step_metrics)
+            metrics_ep.append(step_metrics.numpy())
             actions_ep.append(action)
 
             Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
@@ -77,7 +77,6 @@ def gen_trajectories(routes_file=''):
                 'actions': actions_ep,
                 'metrics': metrics_ep,
             })
-
             ep_df.to_json(episode_dir / 'episode.json')
 
 if __name__ == "__main__":

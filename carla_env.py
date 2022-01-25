@@ -1,19 +1,19 @@
-import math
 import numpy as np
 import gym
 from gym import spaces
 import collections
 import queue
 import time
+import torch
+from torchvision import transforms
 
 import carla
 
-from PIL import Image, ImageDraw
+from PIL import Image
 from auto_pilot.route_parser import parse_routes_file
 from auto_pilot.route_manipulation import interpolate_trajectory
-from auto_pilot.planner import RoutePlanner, Plotter
+from auto_pilot.planner import RoutePlanner
 from auto_pilot.route_manipulation import downsample_route
-from auto_pilot.pid_controller import PIDController
 
 
 VEHICLE_NAME = 'vehicle.lincoln.mkz2017'
@@ -194,6 +194,9 @@ class CarlaEnv(gym.Env):
 
         self.train = train
         self.eval = eval
+        self.preprocess = transforms.Compose([
+            transforms.ToTensor(),
+        ])
 
     def _spawn_player(self):
         reset_trajectory = True
@@ -249,8 +252,22 @@ class CarlaEnv(gym.Env):
         self._sensors['imu'] = IMU(self._world, self._player)
 
     def get_start_position(self, reset_trajectory):
+        random_start = False
+        
+        if self.train:
+            if np.random.randint(10) == 0 and not reset_trajectory:
+                reset_trajectory = True
+                random_start = True
+            if  not self._player:
+                reset_trajectory = True
+                random_start = True
+
         if reset_trajectory:
-            global_plan_gps, global_plan_world_coord = interpolate_trajectory(self._world, self.trajectory)
+            start = 0
+            if random_start:
+                start = np.random.randint(len(self.trajectory) - 2)
+            global_plan_gps, global_plan_world_coord = interpolate_trajectory(
+                self._world, self.trajectory[start:])
 
             self._waypoint_planner.set_route(
                 global_plan_gps, global_plan_world_coord)
@@ -350,11 +367,19 @@ class CarlaEnv(gym.Env):
         self.rgb = result['rgb']
         self.rgb_left = result['rgb_left']
         self.rgb_right = result['rgb_right']
+
         if self.env_id == 'expert':
             self.topdown = result['topdown']
-        rgb = np.transpose(result['rgb'], (2, 0, 1))
-        rgb_left = np.transpose(result['rgb_left'], (2, 0, 1))
-        rgb_right = np.transpose(result['rgb_right'], (2, 0, 1))
+        rgb = Image.fromarray(result['rgb'])
+        rgb_left = Image.fromarray(result['rgb_left'])
+        rgb_right = Image.fromarray(result['rgb_right'])
+        rgb = rgb.convert("RGB")
+        rgb_left = rgb_left.convert("RGB")
+        rgb_right = rgb_right.convert("RGB")
+        rgb = self.preprocess(rgb)
+        rgb_left = self.preprocess(rgb_left)
+        rgb_right = self.preprocess(rgb_right)
+        obs = torch.cat([rgb, rgb_left, rgb_right])
 
         result = {key: val.get() for key, val in self._sensors.items()}
         gps = result['gnss']
@@ -373,8 +398,7 @@ class CarlaEnv(gym.Env):
         velocity = self._player.get_velocity()
         speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
 
-        metrics = np.array([target[0], target[1], speed, road_option.value])
-        obs = np.concatenate((rgb, rgb_left, rgb_right))
+        metrics = torch.Tensor([target[0], target[1], speed, road_option.value])
 
         self.cur_length += 1
 
