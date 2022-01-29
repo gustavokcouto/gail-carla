@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tools.utils import init
-from torchvision.models.resnet import ResNet, BasicBlock, resnet18
+from torchvision.models.resnet import ResNet, BasicBlock, resnet18, resnet34
 from torchvision import transforms
 
 
@@ -61,9 +61,9 @@ class CNNBase(nn.Module):
         self.multi_head = multi_head
 
         if resnet:
-            self.obs_processor = ProcessObsFeaturesPretrained(obs_shape)
+            self.obs_processor = ProcessObsFeaturesResnet(obs_shape, resnet_34=True)
         else:
-            self.obs_processor = ProcessObsFeaturesPretrained(obs_shape)
+            self.obs_processor = ProcessObsFeatures(obs_shape)
 
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
 
@@ -252,35 +252,13 @@ class ProcessAction(nn.Module):
 
 
 class ProcessObsFeaturesResnet(nn.Module):
-    def __init__(self, obs_shape):
+    def __init__(self, obs_shape, resnet_34=False):
         super(ProcessObsFeaturesResnet, self).__init__()
 
-        self.main = ResNet(BasicBlock, [2, 2, 2, 2], norm_layer=nn.InstanceNorm2d)
-
-        old = self.main.conv1
-        self.main.conv1 = torch.nn.Conv2d(
-                obs_shape[0], old.out_channels,
-                kernel_size=old.kernel_size, stride=old.stride,
-                padding=old.padding, bias=old.bias)
-
-        # Get image dim
-        self.output_dim = 1000
-    def forward(self, obs):
-        # scale observation
-        obs_transformed = obs.clone()
-        # obs_transformed = obs_transformed * 2 - 1
-        obs_transformed.requires_grad = True
-
-        obs_features = self.main(obs_transformed)
-
-        return obs_features, obs_transformed
-
-
-class ProcessObsFeaturesPretrained(nn.Module):
-    def __init__(self, obs_shape):
-        super(ProcessObsFeaturesPretrained, self).__init__()
-
-        self.main = resnet18(pretrained=True).eval()
+        if resnet_34:
+            self.main = resnet34(pretrained=True).eval()
+        else:
+            self.main = resnet18(pretrained=True).eval()
 
         self.main.fc = nn.Linear(512, 1000)
 
@@ -296,9 +274,9 @@ class ProcessObsFeaturesPretrained(nn.Module):
         # obs_transformed = obs_transformed * 2 - 1
         obs_transformed.requires_grad = True
 
-        obs_left = self.normalize(obs[:, :3])
-        obs_center = self.normalize(obs[:, 3:6])
-        obs_right = self.normalize(obs[:, 6:])
+        obs_left = self.normalize(obs_transformed[:, :3])
+        obs_center = self.normalize(obs_transformed[:, 3:6])
+        obs_right = self.normalize(obs_transformed[:, 6:])
 
         left_feat = self.main(obs_left)
         center_feat = self.main(obs_center)
