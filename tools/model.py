@@ -58,8 +58,7 @@ class CNNBase(nn.Module):
     def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, multi_head, resnet):
         super(CNNBase, self).__init__()
 
-        self.obs_processor = ProcessObsFeaturesResnet(
-            obs_shape, resnet_34=True)
+        self.obs_processor = ProcessObsFeaturesResnet(obs_shape)
 
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
         hidden_size = 256
@@ -143,7 +142,6 @@ class NNBranchedHead(nn.Module):
                 nn.Linear(input_size, hidden_size),
                 nn.LeakyReLU(0.2),
                 nn.Linear(hidden_size, hidden_size),
-                nn.Dropout(0.5),
                 nn.LeakyReLU(0.2),
                 nn.Linear(hidden_size, output_size),
             )
@@ -156,7 +154,6 @@ class NNBranchedHead(nn.Module):
                 nn.Linear(input_size, hidden_size),
                 nn.LeakyReLU(0.2),
                 nn.Linear(hidden_size, hidden_size),
-                nn.Dropout(0.5),
                 nn.LeakyReLU(0.2),
                 nn.Linear(hidden_size, 1),
             )
@@ -183,7 +180,11 @@ class ProcessObsFeatures(nn.Module):
         C, H, W = obs_shape
 
         self.main = nn.Sequential(
-            nn.Conv2d(C, 32, 4, stride=2),
+            nn.Conv2d(C, 8, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(8, 16, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(16, 32, 4, stride=2),
             nn.LeakyReLU(0.2),
             nn.Conv2d(32, 64, 4, stride=2),
             nn.LeakyReLU(0.2),
@@ -194,7 +195,7 @@ class ProcessObsFeatures(nn.Module):
             Flatten()
         )
 
-        for _ in range(4):
+        for _ in range(6):
             H = (H - 4)//2 + 1
             W = (W - 4)//2 + 1
 
@@ -257,34 +258,26 @@ class ProcessMetrics(nn.Module):
 class ProcessObsFeaturesResnet(nn.Module):
     def __init__(self, obs_shape, resnet_34=False):
         super(ProcessObsFeaturesResnet, self).__init__()
-
-        if resnet_34:
-            self.main = resnet34(pretrained=True).eval()
-        else:
-            self.main = resnet18(pretrained=True).eval()
-
-        self.main.fc = nn.Linear(512, 512)
+        self.main = resnet18(pretrained=True).eval()
+        self.main.avgpool = nn.AvgPool2d(2)
+        self.main.fc = nn.Identity()
+        self.output_dim = 1000
+        with torch.no_grad():
+            x = torch.zeros(1, *obs_shape)
+            x = self.main(x)
+            n_flatten = x.shape[1]
+        print('nn_flatten: {}'.format(n_flatten))
+        self.main.fc = nn.Linear(n_flatten, self.output_dim)
 
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                               std=[0.229, 0.224, 0.225])
 
-        # Get image dim
-        self.output_dim = 3 * 512
-
     def forward(self, obs):
         # scale observation
         obs_transformed = obs.clone()
-        # obs_transformed = obs_transformed * 2 - 1
         obs_transformed.requires_grad = True
+        obs_normalized = self.normalize(obs_transformed)
 
-        obs_left = self.normalize(obs_transformed[:, :3])
-        obs_center = self.normalize(obs_transformed[:, 3:6])
-        obs_right = self.normalize(obs_transformed[:, 6:])
-
-        left_feat = self.main(obs_left)
-        center_feat = self.main(obs_center)
-        right_feat = self.main(obs_right)
-
-        obs_features = torch.cat([left_feat, center_feat, right_feat], dim=1)
+        obs_features = self.main(obs_normalized)
 
         return obs_features, obs_transformed

@@ -57,6 +57,7 @@ class PPO():
         throttle_std_epoch = 0
 
         n_updates = 0
+        torch.cuda.empty_cache()
         for _ in range(self.ppo_epoch):
             data_generator = rollouts.feed_forward_generator(
                 advantages, self.mini_batch_size)

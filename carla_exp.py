@@ -30,15 +30,13 @@ def gen_trajectories(routes_file=''):
 
     env = EnvMonitor(env, output_path=expert_file_dir)
 
-    for route_id in tqdm.tqdm(range(10)):
+    for route_id in tqdm.tqdm(range(1)):
         env.env.set_route(route_id)
         trajectory = env.env.trajectory
         global_plan_gps, global_plan_world_coord = interpolate_trajectory(env.env._world, trajectory)
-        for ep_id in range(2):
+        for ep_id in range(5):
             episode_dir = expert_file_dir / ('route_%02d' % route_id) / ('ep_%02d' % ep_id)
             (episode_dir / 'rgb').mkdir(parents=True)
-            (episode_dir / 'rgb_left').mkdir(parents=True)
-            (episode_dir / 'rgb_right').mkdir(parents=True)
             (episode_dir / 'topdown').mkdir(parents=True)
             metrics_ep = []
             actions_ep = []
@@ -57,9 +55,7 @@ def gen_trajectories(routes_file=''):
 
                 metrics_ep.append(step_metrics.numpy())
                 actions_ep.append(action)
-                Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
                 Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
-                Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
                 Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
 
                 _, step_metrics, _, _, _ = env.step(action)
@@ -68,9 +64,7 @@ def gen_trajectories(routes_file=''):
             metrics_ep.append(step_metrics.numpy())
             actions_ep.append(action)
 
-            Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
             Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
-            Image.fromarray(env.env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
             Image.fromarray(env.env.topdown).save(episode_dir / 'topdown' / ('%04d.png' % i_step))
 
             ep_df = pd.DataFrame({

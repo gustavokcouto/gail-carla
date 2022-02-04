@@ -98,6 +98,7 @@ class Discriminator(nn.Module):
         n = 0
         policy_reward = 0
         expert_reward = 0
+        torch.cuda.empty_cache()
         for expert_batch, policy_batch in zip(expert_loader,
                                               policy_data_generator):
             policy_state, policy_metrics, policy_action = policy_batch[
@@ -247,17 +248,8 @@ class ExpertDataset(torch.utils.data.Dataset):
             ep_dir = self.dataset_path / \
                 'route_{:0>2d}/ep_{:0>2d}'.format(route_idx, ep_idx)
             rgb = Image.open(ep_dir / 'rgb/{:0>4d}.png'.format(step_idx))
-            rgb_left = Image.open(
-                ep_dir / 'rgb_left/{:0>4d}.png'.format(step_idx))
-            rgb_right = Image.open(
-                ep_dir / 'rgb_right/{:0>4d}.png'.format(step_idx))
             rgb = rgb.convert("RGB")
-            rgb_left = rgb_left.convert("RGB")
-            rgb_right = rgb_right.convert("RGB")
-            rgb = self.preprocess(rgb)
-            rgb_left = self.preprocess(rgb_left)
-            rgb_right = self.preprocess(rgb_right)
-            obs = torch.cat([rgb, rgb_left, rgb_right])
+            obs = self.preprocess(rgb)
             self.actual_obs[j] = obs
         else:
             obs = self.actual_obs[j]

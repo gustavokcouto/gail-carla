@@ -35,6 +35,11 @@ class Camera(object):
         bp.set_attribute('image_size_x', str(w))
         bp.set_attribute('image_size_y', str(h))
         bp.set_attribute('fov', str(fov))
+        # set in leaderboard
+        bp.set_attribute('lens_circle_multiplier', str(3.0))
+        bp.set_attribute('lens_circle_falloff', str(3.0))
+        bp.set_attribute('chromatic_aberration_intensity', str(0.5))
+        bp.set_attribute('chromatic_aberration_offset', str(0))
 
         loc = carla.Location(x=x, y=y, z=z)
         rot = carla.Rotation(pitch=pitch, yaw=yaw)
@@ -180,7 +185,7 @@ class CarlaEnv(gym.Env):
                                        shape=(2,), dtype=np.float32)
 
         self.observation_space = spaces.Box(low=0, high=255,
-                                            shape=(9, 144, 256), dtype=np.uint8)
+                                            shape=(3, 256, 900), dtype=np.uint8)
 
         self.metrics_space = spaces.Box(low=-100, high=100,
                                         shape=(4,), dtype=np.float32)
@@ -239,11 +244,7 @@ class CarlaEnv(gym.Env):
         Add sensors to _actor_dict to be cleaned up.
         """
         self._cameras['rgb'] = Camera(
-            self._world, self._player, 256, 144, 90, 1.2, 0.0, 1.3, 0.0, 0.0)
-        self._cameras['rgb_left'] = Camera(
-            self._world, self._player, 256, 144, 90, 1.2, -0.25, 1.3, 0.0, -45.0)
-        self._cameras['rgb_right'] = Camera(
-            self._world, self._player, 256, 144, 90, 1.2, 0.25, 1.3, 0.0, 45.0)
+            self._world, self._player, 900, 256, 100, -1.5, 0.0, 2.0, 0.0, 0.0)
         if self.env_id == 'expert':
             self._cameras['topdown'] = Camera(
                 self._world, self._player, 512, 512, 50, 0, 0, 100, -90, 0)
@@ -365,21 +366,12 @@ class CarlaEnv(gym.Env):
         result = {key: val.get() for key, val in self._cameras.items()}
 
         self.rgb = result['rgb']
-        self.rgb_left = result['rgb_left']
-        self.rgb_right = result['rgb_right']
 
         if self.env_id == 'expert':
             self.topdown = result['topdown']
         rgb = Image.fromarray(result['rgb'])
-        rgb_left = Image.fromarray(result['rgb_left'])
-        rgb_right = Image.fromarray(result['rgb_right'])
         rgb = rgb.convert("RGB")
-        rgb_left = rgb_left.convert("RGB")
-        rgb_right = rgb_right.convert("RGB")
-        rgb = self.preprocess(rgb)
-        rgb_left = self.preprocess(rgb_left)
-        rgb_right = self.preprocess(rgb_right)
-        obs = torch.cat([rgb, rgb_left, rgb_right])
+        obs = self.preprocess(rgb)
 
         result = {key: val.get() for key, val in self._sensors.items()}
         gps = result['gnss']
