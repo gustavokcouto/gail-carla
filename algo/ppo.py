@@ -40,7 +40,8 @@ class PPO():
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
 
-        self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps, betas=betas)
+        self.linear_optimizer = optim.Adam(actor_critic.main.linear_params, lr=lr, eps=eps, betas=betas)
+        self.image_optimizer = optim.Adam(actor_critic.main.image_params, lr=lr, eps=eps, betas=betas)
 
     def update(self, rollouts, expert_dataset=None):
         # Expert dataset in case the BC update is required
@@ -86,20 +87,7 @@ class PPO():
                 gail_action_loss_epoch += action_loss.item()
                 # Expert dataset
                 if expert_dataset:
-                    for exp_state, exp_metrics, exp_action in expert_dataset:
-                        exp_state = Variable(exp_state).to(action_loss.device)
-                        exp_metrics = Variable(exp_metrics).to(action_loss.device)
-                        exp_action = Variable(exp_action).to(action_loss.device)
-                        # Get BC loss
-                        _, alogprobs, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, exp_action)
-                        bcloss = -alogprobs.mean()
 
-                        bc_loss_epoch += bcloss.item()
-
-                        # action loss is weighted sum
-                        action_loss = self.gamma * bcloss + (1 - self.gamma) * action_loss
-                        # Multiply this coeff with decay factor
-                        break
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
@@ -112,11 +100,29 @@ class PPO():
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-                self.optimizer.zero_grad()
+                self.linear_optimizer.zero_grad()
                 (value_loss * self.value_loss_coef + action_loss).backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                nn.utils.clip_grad_norm_(self.actor_critic.main.linear_params),
                                          self.max_grad_norm)
-                self.optimizer.step()
+                self.linear_optimizer.step()
+
+                for exp_state, exp_metrics, exp_action in expert_dataset:
+                    exp_state = Variable(exp_state).to(action_loss.device)
+                    exp_metrics = Variable(exp_metrics).to(action_loss.device)
+                    exp_action = Variable(exp_action).to(action_loss.device)
+                    # Get BC loss
+                    _, alogprobs, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, exp_action)
+                    bcloss = -alogprobs.mean()
+
+                    bc_loss_epoch += bcloss.item()
+
+                    # Multiply this coeff with decay factor
+                    break
+                self.linear_optimizer.zero_grad()
+                bcloss.backward()
+                nn.utils.clip_grad_norm_(self.actor_critic.main.image_params,
+                                         self.max_grad_norm)
+                self.image_optimizer.step()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()

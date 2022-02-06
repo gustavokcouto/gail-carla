@@ -68,6 +68,8 @@ class CNNBase(nn.Module):
         self.head = NNHead(hidden_size, num_outputs, value=True)
         self.logstd = torch.Tensor(logstd)
 
+        self.linear_params = list(self.metrics_processor.parameters()) + list(self.body.parameters()) + list(self.head.parameters())
+        self.image_params = self.obs_processor.parameters()
         self.activation = activation
 
     def forward(self, obs, metrics, gail=False):
