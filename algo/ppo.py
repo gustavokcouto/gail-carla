@@ -75,7 +75,7 @@ class PPO():
 
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, steer_std, throttle_std = self.actor_critic.evaluate_actions(
-                    obs_batch, metrics_batch, actions_batch)
+                    obs_batch, metrics_batch, actions_batch, gail=True)
 
                 ratio = torch.exp(action_log_probs -
                                   old_action_log_probs_batch)
