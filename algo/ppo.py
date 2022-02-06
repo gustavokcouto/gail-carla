@@ -40,8 +40,8 @@ class PPO():
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
 
-        self.linear_optimizer = optim.Adam(actor_critic.main.linear_params, lr=lr, eps=eps, betas=betas)
-        self.image_optimizer = optim.Adam(actor_critic.main.image_params, lr=lr, eps=eps, betas=betas)
+        self.linear_optimizer = optim.Adam(actor_critic.base.linear_params, lr=lr, eps=eps, betas=betas)
+        self.image_optimizer = optim.Adam(actor_critic.base.image_params, lr=lr, eps=eps, betas=betas)
 
     def update(self, rollouts, expert_dataset=None):
         # Expert dataset in case the BC update is required
@@ -85,9 +85,6 @@ class PPO():
                                     1.0 + self.clip_param) * adv_targ
                 action_loss = -torch.min(surr1, surr2).mean()
                 gail_action_loss_epoch += action_loss.item()
-                # Expert dataset
-                if expert_dataset:
-
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
@@ -102,7 +99,7 @@ class PPO():
 
                 self.linear_optimizer.zero_grad()
                 (value_loss * self.value_loss_coef + action_loss).backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.main.linear_params),
+                nn.utils.clip_grad_norm_(self.actor_critic.base.linear_params,
                                          self.max_grad_norm)
                 self.linear_optimizer.step()
 
@@ -118,9 +115,10 @@ class PPO():
 
                     # Multiply this coeff with decay factor
                     break
-                self.linear_optimizer.zero_grad()
+
+                self.image_optimizer.zero_grad()
                 bcloss.backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.main.image_params,
+                nn.utils.clip_grad_norm_(self.actor_critic.base.image_params,
                                          self.max_grad_norm)
                 self.image_optimizer.step()
 
