@@ -257,34 +257,23 @@ class ProcessMetrics(nn.Module):
 class ProcessObsFeaturesResnet(nn.Module):
     def __init__(self, obs_shape, resnet_34=False):
         super(ProcessObsFeaturesResnet, self).__init__()
-
-        if resnet_34:
-            self.main = resnet34(pretrained=True).eval()
-        else:
-            self.main = resnet18(pretrained=True).eval()
-
-        self.main.fc = nn.Linear(512, 512)
-
-        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                              std=[0.229, 0.224, 0.225])
-
-        # Get image dim
-        self.output_dim = 3 * 512
+        in_channels = obs_shape[0]
+        self.main = resnet18(pretrained=False).eval()
+        old = self.main.conv1
+        self.main.conv1 = torch.nn.Conv2d(
+            in_channels, old.out_channels,
+            kernel_size=old.kernel_size, stride=old.stride,
+            padding=old.padding, bias=old.bias)
+        self.output_dim = 1000
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.485, 0.456, 0.406, 0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225, 0.229, 0.224, 0.225, 0.229, 0.224, 0.225])
 
     def forward(self, obs):
         # scale observation
         obs_transformed = obs.clone()
-        # obs_transformed = obs_transformed * 2 - 1
         obs_transformed.requires_grad = True
 
-        obs_left = self.normalize(obs_transformed[:, :3])
-        obs_center = self.normalize(obs_transformed[:, 3:6])
-        obs_right = self.normalize(obs_transformed[:, 6:])
+        obs_normalized = self.normalize(obs_transformed)
+        resnet_features = self.main(obs_normalized)
 
-        left_feat = self.main(obs_left)
-        center_feat = self.main(obs_center)
-        right_feat = self.main(obs_right)
-
-        obs_features = torch.cat([left_feat, center_feat, right_feat], dim=1)
-
-        return obs_features, obs_transformed
+        return resnet_features, obs_transformed
