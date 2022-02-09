@@ -8,7 +8,7 @@ import torch.utils.data
 from torch import autograd
 from torchvision import transforms
 
-from tools.model import ProcessMetrics, ProcessObsFeatures, NNHead
+from tools.model import ProcessMetrics, ProcessAction, ProcessObsFeatures, NNHead
 import torch.optim as optim
 from PIL import Image
 
@@ -21,8 +21,9 @@ class Discriminator(nn.Module):
         self.device = device
         self.ct_lambda = 2.0
         self.obs_processor = ProcessObsFeatures(state_shape)
-        self.metrics_processor = ProcessMetrics(metrics_space.shape[0], action_shape=action_space.shape[0])
-        self.head = NNHead(self.obs_processor.output_dim + self.metrics_processor.output_dim, 1)
+        self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
+        self.action_processor = ProcessAction(action_space.shape[0])
+        self.head = NNHead(self.obs_processor.output_dim + self.metrics_processor.output_dim + self.action_processor.output_dim, 1)
 
         self.max_grad_norm = max_grad_norm
         self.optimizer = optim.Adam(self.parameters(),
@@ -34,11 +35,12 @@ class Discriminator(nn.Module):
         road_options = metrics[:, 3].long()
         road_options -= 1
         state_features, state_transformed = self.obs_processor(state)
-        metrics_features, metrics_transformed = self.metrics_processor(metrics, action)
+        metrics_features, metrics_transformed = self.metrics_processor(metrics)
+        action_features, action_transformed = self.action_processor(action)
         cat_features = torch.cat(
-            [state_features, metrics_features], dim=1)
+            [state_features, metrics_features, action_features], dim=1)
         output = self.head(cat_features, road_options)
-        return output, state_transformed, metrics_transformed
+        return output, state_transformed, metrics_transformed, action_transformed
 
     def compute_grad_pen(self,
                          expert_state,
@@ -66,13 +68,13 @@ class Discriminator(nn.Module):
         mixup_action = alpha_action * expert_action + \
             (1 - alpha_action) * policy_action
 
-        disc, mixup_state_transformed, mixup_metrics_transformed = self.forward(
+        disc, mixup_state_transformed, mixup_metrics_transformed, mixup_action_transformed = self.forward(
             mixup_state, mixup_metrics, mixup_action)
         ones = torch.ones(disc.size()).to(disc.device)
 
         grad = autograd.grad(
             outputs=disc,
-            inputs=(mixup_state_transformed, mixup_metrics_transformed),
+            inputs=(mixup_state_transformed, mixup_metrics_transformed, mixup_action_transformed),
             grad_outputs=ones,
             create_graph=True,
             retain_graph=True,
@@ -106,7 +108,7 @@ class Discriminator(nn.Module):
             policy_metrics = policy_metrics.to(self.device)
             policy_action = policy_action.to(self.device)
 
-            policy_d, _, _ = self.forward(
+            policy_d, _, _, _ = self.forward(
                 policy_state, policy_metrics, policy_action)
             policy_reward += policy_d.sum().item()
 
@@ -116,7 +118,7 @@ class Discriminator(nn.Module):
             expert_metrics = expert_metrics.to(self.device)
             expert_action = expert_action.to(self.device)
 
-            expert_d, _, _ = self.forward(
+            expert_d, _, _, _ = self.forward(
                 expert_state, expert_metrics, expert_action)
             expert_reward += expert_d.sum().item()
 
@@ -163,7 +165,7 @@ class Discriminator(nn.Module):
                 policy_metrics = policy_metrics.to(self.device)
                 policy_action = policy_action.to(self.device)
 
-                policy_d, _, _ = self.forward(
+                policy_d, _, _, _ = self.forward(
                     policy_state, policy_metrics, policy_action)
 
                 expert_state, expert_metrics, expert_action = expert_batch
@@ -171,7 +173,7 @@ class Discriminator(nn.Module):
                 expert_metrics = expert_metrics.to(self.device)
                 expert_action = expert_action.to(self.device)
 
-                expert_d, _, _ = self.forward(
+                expert_d, _, _, _ = self.forward(
                     expert_state, expert_metrics, expert_action)
 
                 expert_loss = torch.mean(torch.tanh(expert_d))
@@ -191,7 +193,7 @@ class Discriminator(nn.Module):
 
     def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
         with torch.no_grad():
-            d, _, _ = self.forward(state, metrics, action)
+            d, _, _, _ = self.forward(state, metrics, action)
             s = torch.sigmoid(d)
             reward = -(1 - s).log()
             reward = reward.cpu()

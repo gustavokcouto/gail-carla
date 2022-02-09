@@ -58,14 +58,11 @@ class CNNBase(nn.Module):
     def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, multi_head, resnet):
         super(CNNBase, self).__init__()
 
-        self.obs_processor = ProcessObsFeaturesResnet(
-            obs_shape, resnet_34=True)
+        self.obs_processor = ProcessObsFeatures(obs_shape)
 
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
-        hidden_size = 256
-        self.body = NNBody(self.obs_processor.output_dim +
-                           self.metrics_processor.output_dim, hidden_size)
-        self.head = NNHead(hidden_size, num_outputs, value=True)
+        self.head = NNHead(self.obs_processor.output_dim +
+                           self.metrics_processor.output_dim, num_outputs, value=True)
         self.logstd = torch.Tensor(logstd)
 
         self.activation = activation
@@ -74,10 +71,9 @@ class CNNBase(nn.Module):
         obs_features, _ = self.obs_processor(obs)
         metrics_features, _ = self.metrics_processor(metrics)
         cat_features = torch.cat([obs_features, metrics_features], dim=1)
-        nn_body = self.body(cat_features)
         road_options = metrics[:, 3].long()
         road_options -= 1
-        critic, output = self.head(nn_body, road_options)
+        critic, output = self.head(cat_features, road_options)
 
         if self.activation:
             output[..., 0] = torch.tanh(output[..., 0])
@@ -211,69 +207,85 @@ class ProcessObsFeatures(nn.Module):
 
 
 class ProcessMetrics(nn.Module):
-    def __init__(self, metrics_shape, action_shape=None):
+    def __init__(self, metrics_shape):
         super(ProcessMetrics, self).__init__()
 
+        road_option_embedding_dimension = 8
+        max_road_options = 10
+        self.road_option_embedding = nn.Embedding(max_road_options, road_option_embedding_dimension)
         # target x, y, r, theta
-        hidden_size = 128
-        self.output_dim = hidden_size
-        input_dim = 4
-        if action_shape:
-            self.process_action = True
-            input_dim += action_shape
-        else:
-            self.process_action = False
+        target_shape = 4
+        speed_shape = 1
+        self.output_dim = target_shape + speed_shape + road_option_embedding_dimension
 
-        self.main = nn.Sequential(
-            nn.Linear(input_dim, hidden_size),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, hidden_size),
-            nn.LeakyReLU(0.2)
-        )
-
-    def forward(self, metrics, action=None):
+    def forward(self, metrics):
         # metrics composition [target[0], target[1], speed, int(road_option)]
 
-        # max speed of 60m/s or 216km/h
-        speed = 0.1 * metrics[:, 2].unsqueeze(dim=1)
-
-        road_option = metrics[:, 3].unsqueeze(dim=1)
+        metrics_copy = metrics.clone().cpu().numpy()
+        target_x = metrics_copy[:, 0]
+        target_y = metrics_copy[:, 1]
+        target_r = np.sqrt(target_x * target_x + target_y * target_y)
+        target_theta = np.arctan2(target_y, target_x) 
 
         # scale target x and y by 1000
-        target_x = 1000 * metrics[:, 0].unsqueeze(dim=1)
-        target_y = 1000 * metrics[:, 1].unsqueeze(dim=1)
+        metrics_target_x = 1000 * torch.from_numpy(target_x).float().unsqueeze(dim=1)
+        metrics_target_y = 1000 * torch.from_numpy(target_y).float().unsqueeze(dim=1)
 
-        metrics_transformed = torch.cat([speed, road_option, target_x, target_y], dim=1)
-        if self.process_action:
-            metrics_transformed = torch.cat([metrics_transformed, action], dim=1)
+        # scale target radius by 1000
+        metrics_target_r = 1000 * torch.from_numpy(target_r).float().unsqueeze(dim=1)
 
+        # scale target theta by 0.3
+        metrics_target_theta = 0.3 * torch.from_numpy(target_theta).float().unsqueeze(dim=1)
+
+        # max speed of 60m/s or 216km/h
+        speed = metrics_copy[:, 2]
+
+        # scale speed by 0.1
+        metrics_speed = 0.1 * torch.from_numpy(speed).float().unsqueeze(dim=1)
+
+        road_options = metrics_copy[:, 3]
+        road_options_tensor = torch.from_numpy(road_options).long().to(metrics.device)
+        road_option_features = self.road_option_embedding(road_options_tensor)
+
+        metrics_transformed = torch.cat([metrics_target_x, metrics_target_y, metrics_target_r, metrics_target_theta, metrics_speed], dim=1).clone().to(metrics.device)
         metrics_transformed.requires_grad = True
 
-        metrics_features = self.main(metrics_transformed)
+        metrics_transformed = torch.cat([metrics_transformed, road_option_features], dim=1)
 
-        return metrics_features, metrics_transformed
+        return metrics_transformed, metrics_transformed
 
+
+class ProcessAction(nn.Module):
+    def __init__(self, action_shape):
+        super(ProcessAction, self).__init__()
+        self.output_dim = action_shape
+
+    def forward(self, action):
+        action_transformed = action.clone()
+        action_transformed.requires_grad = True
+
+        return action_transformed, action_transformed
 
 class ProcessObsFeaturesResnet(nn.Module):
     def __init__(self, obs_shape, resnet_34=False):
         super(ProcessObsFeaturesResnet, self).__init__()
         in_channels = obs_shape[0]
-        self.main = resnet18(pretrained=False).eval()
-        old = self.main.conv1
-        self.main.conv1 = torch.nn.Conv2d(
-            in_channels, old.out_channels,
-            kernel_size=old.kernel_size, stride=old.stride,
-            padding=old.padding, bias=old.bias)
-        self.output_dim = 1000
-        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.485, 0.456, 0.406, 0.485, 0.456, 0.406],
-                                              std=[0.229, 0.224, 0.225, 0.229, 0.224, 0.225, 0.229, 0.224, 0.225])
+        self.main = resnet34(pretrained=True).eval()
+        self.main.fc = nn.Identity()
+        self.output_dim = 512 * 3
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225])
 
     def forward(self, obs):
         # scale observation
         obs_transformed = obs.clone()
-        obs_transformed.requires_grad = True
+        with torch.no_grad():
+            obs_left = self.normalize(obs_transformed[:, :3])
+            obs_center = self.normalize(obs_transformed[:, 3:6])
+            obs_right = self.normalize(obs_transformed[:, 6:])
+            left_feat = self.main(obs_left)
+            center_feat = self.main(obs_center)
+            right_feat = self.main(obs_right)
+            obs_features = torch.cat([left_feat, center_feat, right_feat], dim=1)
 
-        obs_normalized = self.normalize(obs_transformed)
-        resnet_features = self.main(obs_normalized)
-
-        return resnet_features, obs_transformed
+        return obs_features, obs_transformed
