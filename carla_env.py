@@ -249,11 +249,29 @@ class CarlaEnv(gym.Env):
         self._sensors['imu'] = IMU(self._world, self._player)
 
     def get_start_position(self, reset_trajectory):
+        random_start = False
+
+        if self.train:
+            if np.random.randint(10) == 0 and not reset_trajectory:
+                reset_trajectory = True
+                random_start = True
+            if  not self._player:
+                reset_trajectory = True
+                random_start = True
+
         if reset_trajectory:
             global_plan_gps, global_plan_world_coord = interpolate_trajectory(self._world, self.trajectory)
+            route_size = len(global_plan_world_coord)
+
+            start = 0
+            if random_start:
+                start = np.random.randint(len(self.trajectory) - 2)
+                global_plan_gps, global_plan_world_coord = interpolate_trajectory(
+                    self._world, self.trajectory[start:])
 
             self._waypoint_planner.set_route(
                 global_plan_gps, global_plan_world_coord)
+            self._waypoint_planner.route_size = route_size
             ds_ids = downsample_route(global_plan_world_coord, 50)
             global_plan_gps = [global_plan_gps[x] for x in ds_ids]
             global_plan_world_coord = [
