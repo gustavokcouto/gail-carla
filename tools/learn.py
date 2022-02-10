@@ -67,15 +67,6 @@ def gailLearning_mujoco_origin(run_params,
     nupdates = np.floor(run_params['num_env_steps'] / nsteps)
     nupdates = nupdates.astype(np.int16)
 
-    epinfobuf = deque(maxlen=10)
-
-    epgailbuf = deque(maxlen=10)
-
-    episode_rewards = deque(maxlen=10)
-    routes_rewards = {}
-    for route_idx in run_params['routes']:
-        routes_rewards[route_idx] = deque(maxlen=10)
-
     cum_gailrewards = [.0 for _ in range(len(run_params['envs_params']))]
 
     i_update = 0
@@ -98,6 +89,14 @@ def gailLearning_mujoco_origin(run_params,
         start -= load_data[3]
 
     while i_update < nupdates:
+        epinfobuf = []
+
+        epgailbuf = []
+
+        episode_rewards = []
+        routes_rewards = {}
+        for route_idx in run_params['routes']:
+            routes_rewards[route_idx] = []
 
         i_update += 1
         epinfos = []
