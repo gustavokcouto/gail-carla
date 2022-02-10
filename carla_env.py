@@ -5,6 +5,8 @@ from gym import spaces
 import collections
 import queue
 import time
+import torch
+from torchvision import transforms
 
 import carla
 
@@ -194,6 +196,9 @@ class CarlaEnv(gym.Env):
 
         self.train = train
         self.eval = eval
+        self.preprocess = transforms.Compose([
+            transforms.ToTensor(),
+        ])
 
     def _spawn_player(self):
         reset_trajectory = True
@@ -370,9 +375,16 @@ class CarlaEnv(gym.Env):
         self.rgb_right = result['rgb_right']
         if self.env_id == 'expert':
             self.topdown = result['topdown']
-        rgb = np.transpose(result['rgb'], (2, 0, 1))
-        rgb_left = np.transpose(result['rgb_left'], (2, 0, 1))
-        rgb_right = np.transpose(result['rgb_right'], (2, 0, 1))
+        rgb = Image.fromarray(result['rgb'])
+        rgb_left = Image.fromarray(result['rgb_left'])
+        rgb_right = Image.fromarray(result['rgb_right'])
+        rgb = rgb.convert("RGB")
+        rgb_left = rgb_left.convert("RGB")
+        rgb_right = rgb_right.convert("RGB")
+        rgb = self.preprocess(rgb)
+        rgb_left = self.preprocess(rgb_left)
+        rgb_right = self.preprocess(rgb_right)
+        obs = torch.cat([rgb, rgb_left, rgb_right])
 
         result = {key: val.get() for key, val in self._sensors.items()}
         gps = result['gnss']
@@ -391,8 +403,7 @@ class CarlaEnv(gym.Env):
         velocity = self._player.get_velocity()
         speed = np.linalg.norm([velocity.x, velocity.y, velocity.z])
 
-        metrics = np.array([target[0], target[1], speed, road_option.value])
-        obs = np.concatenate((rgb, rgb_left, rgb_right))
+        metrics = torch.Tensor([target[0], target[1], speed, road_option.value])
 
         self.cur_length += 1
 

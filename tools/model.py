@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tools.utils import init
 from torchvision.models.resnet import resnet18, resnet50
+from torchvision import transforms
 
 
 class Flatten(nn.Module):
@@ -157,12 +158,15 @@ class ProcessObsFeatures(nn.Module):
 
         # Get image dim
         self.output_dim = 256*H*W
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.485, 0.456, 0.406, 0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225, 0.229, 0.224, 0.225, 0.229, 0.224, 0.225])
 
     def forward(self, obs):
         # scale observation
-        obs_transformed = obs / 255
+        obs_transformed = obs.clone()
         obs_transformed.requires_grad = True
-        obs_features = self.main(obs_transformed)
+        obs_normalized = self.normalize(obs_transformed)
+        obs_features = self.main(obs_normalized)
 
         return obs_features, obs_transformed
 

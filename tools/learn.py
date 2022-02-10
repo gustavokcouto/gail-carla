@@ -33,8 +33,6 @@ def gailLearning_mujoco_origin(run_params,
         shutil.rmtree(log_save_path)
     utli.writer = SummaryWriter(log_save_path)
 
-    # Evaluate the initial network
-    evaluations = []
     # begin optimize
 
     time_step = 0
@@ -55,8 +53,7 @@ def gailLearning_mujoco_origin(run_params,
                               len(run_params['envs_params']),
                               obs_shape,
                               metrics_shape,
-                              action_shape,
-                              radius=run_params['replay_radius'])
+                              action_shape)
 
     rollout_eval = RolloutStorage(env_eval.ep_length,
                                   1,
@@ -72,8 +69,8 @@ def gailLearning_mujoco_origin(run_params,
     i_update = 0
 
     obs, metrics = envs.reset()
-    rollouts.obs[0][rollouts.iter].copy_(obs)
-    rollouts.metrics[0][rollouts.iter].copy_(metrics)
+    rollouts.obs[0].copy_(obs)
+    rollouts.metrics[0].copy_(metrics)
 
     start = time.time()
 
@@ -110,56 +107,35 @@ def gailLearning_mujoco_origin(run_params,
         discriminator.cpu()
         actor_critic.to(device)
         EnvEpoch.set_epoch(i_update)
-        if rollouts.full:
-            iters = 1
-        else:
-            iters = rollouts.radius
+        for step in range(nbatch):
+            time_step += 1
 
-        for iter in range(iters):
-            for step in range(nbatch):
-                time_step += 1
+            # Sample actions
+            with torch.no_grad():
+                value, action, action_log_prob = actor_critic.act(
+                    rollouts.obs[step].to(device), rollouts.metrics[step].to(device))
 
-                # Sample actions
-                with torch.no_grad():
-                    value, action, action_log_prob = actor_critic.act(
-                        rollouts.obs[step][rollouts.iter].to(device), rollouts.metrics[step][rollouts.iter].to(device))
+            obs, metrics, rewards, done, infos = envs.step(action)
 
-                obs, metrics, rewards, done, infos = envs.step(action)
+            for info in infos:
+                maybeepinfo = info.get('episode')
+                if maybeepinfo:
+                    epinfos.append(maybeepinfo)
+                    routes_rewards[info['route_id']].append(info['episode']['r'])
+                    episode_rewards.append(info['episode']['r'])
 
-                for info in infos:
-                    maybeepinfo = info.get('episode')
-                    if maybeepinfo:
-                        epinfos.append(maybeepinfo)
-                        routes_rewards[info['route_id']].append(info['episode']['r'])
-                        episode_rewards.append(info['episode']['r'])
+            # If done then clean the history of observations.
+            masks = torch.FloatTensor(
+                [[0.0] if done_ else [1.0] for done_ in done])
 
-                # If done then clean the history of observations.
-                masks = torch.FloatTensor(
-                    [[0.0] if done_ else [1.0] for done_ in done])
-
-                rollouts.insert(obs.cpu(), metrics.cpu(), action.cpu(),
-                                action_log_prob, value, rewards, masks)
-
-            if iter < iters - 1:
-                rollouts.after_update()
+            rollouts.insert(obs.cpu(), metrics.cpu(), action.cpu(),
+                            action_log_prob, value, rewards, masks)
 
         print('finished sim')
-        for step in range(nbatch):
-            with torch.no_grad():
-                value_preds, action_log_probs, _, _, _ = actor_critic.evaluate_actions(
-                    rollouts.obs[step].view(-1, *obs_shape).to(device),
-                    rollouts.metrics[step].view(-1, *metrics_shape).to(device),
-                    rollouts.actions[step].view(-1, *action_shape).to(device)
-                )
-            rollouts.value_preds[step] = value_preds.view(rollouts.value_preds[step].size()).detach()
-            rollouts.action_log_probs[step] = action_log_probs.view(rollouts.value_preds[step].size()).detach()
 
         with torch.no_grad():
-            last_value = actor_critic.get_value(
-                rollouts.obs[-1].view(-1, *obs_shape).to(device),
-                rollouts.metrics[-1].view(-1, *metrics_shape).to(device)).detach()
-            rollouts.value_preds[-1] = last_value.view(rollouts.value_preds[-1].size())
-
+            rollouts.value_preds[-1] = actor_critic.get_value(
+                rollouts.obs[-1].to(device), rollouts.metrics[-1].to(device)).detach()
         actor_critic.cpu()
         discriminator.to(device)
 
@@ -210,17 +186,16 @@ def gailLearning_mujoco_origin(run_params,
                                            policy_pre_reward),
                                   time_step=i_update)
         for step in range(nbatch):
-            gail_rewards = discriminator.predict_reward(
-                rollouts.obs[step].view(-1, *obs_shape).to(device),
-                rollouts.metrics[step].view(-1, *metrics_shape).to(device),
-                rollouts.actions[step].view(-1, *action_shape).to(device),
+            rollouts.gail_rewards[step] = discriminator.predict_reward(
+                rollouts.obs[step],
+                rollouts.metrics[step],
+                rollouts.actions[step],
                 run_params['gamma'],
-                rollouts.masks[step].view(-1, 1))
-            rollouts.gail_rewards[step] = gail_rewards.view(rollouts.gail_rewards[step].size())
+                rollouts.masks[step])
 
             for i_env in range(len(run_params['envs_params'])):
-                if rollouts.masks[step][rollouts.iter][i_env]:
-                    cum_gailrewards[i_env] += rollouts.gail_rewards[step][rollouts.iter][i_env].item()
+                if rollouts.masks[step][i_env]:
+                    cum_gailrewards[i_env] += rollouts.gail_rewards[step][i_env].item()
                 else:
                     epgailbuf.append(cum_gailrewards[i_env])
                     cum_gailrewards[i_env] = .0
@@ -244,9 +219,9 @@ def gailLearning_mujoco_origin(run_params,
             obs, metrics = env_eval.reset()
             steps_eval = 0
             while not done:
-                obs = torch.from_numpy(obs).float().to(device)
+                obs = obs.to(device)
                 obs = torch.stack([obs])
-                metrics = torch.from_numpy(metrics).float().to(device)
+                metrics = metrics.to(device)
                 metrics = torch.stack([metrics])
                 with torch.no_grad():
                     value, actions, action_log_prob = actor_critic.act(
@@ -254,9 +229,9 @@ def gailLearning_mujoco_origin(run_params,
                         metrics,
                         deterministic=True
                     )
-                rollout_eval.obs[steps_eval][rollout_eval.iter].copy_(obs.cpu())
-                rollout_eval.metrics[steps_eval][rollout_eval.iter].copy_(metrics.cpu())
-                rollout_eval.actions[steps_eval][rollout_eval.iter].copy_(actions.cpu())
+                rollout_eval.obs[steps_eval].copy_(obs.cpu())
+                rollout_eval.metrics[steps_eval].copy_(metrics.cpu())
+                rollout_eval.actions[steps_eval].copy_(actions.cpu())
 
                 action = actions.cpu().numpy()[0]
                 obs, metrics, _, done, info = env_eval.step(action)
@@ -265,12 +240,10 @@ def gailLearning_mujoco_origin(run_params,
                 if maybeepinfo:
                     eval_reward = info['episode']['r']
 
-            obs = torch.from_numpy(obs).float()
             obs = torch.stack([obs])
-            metrics = torch.from_numpy(metrics).float()
             metrics = torch.stack([metrics])
-            rollout_eval.obs[steps_eval][rollout_eval.iter].copy_(obs.cpu())
-            rollout_eval.metrics[steps_eval][rollout_eval.iter].copy_(metrics.cpu())
+            rollout_eval.obs[steps_eval].copy_(obs.cpu())
+            rollout_eval.metrics[steps_eval].copy_(metrics.cpu())
             actor_critic.cpu()
             discriminator.to(device)
             disc_eval_loss, expert_eval_reward, policy_eval_reward = discriminator.compute_loss(

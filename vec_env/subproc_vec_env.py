@@ -1,5 +1,6 @@
 import multiprocessing as mp
 
+import torch
 import numpy as np
 from vec_env.vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
 
@@ -74,7 +75,7 @@ class SubprocVecEnv(VecEnv):
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         obs, metrics, rews, dones, infos = zip(*results)
-        return _flatten_obs(obs), _flatten_obs(metrics), np.stack(rews), np.stack(dones), infos
+        return torch.stack(obs), torch.stack(metrics), np.stack(rews), np.stack(dones), infos
 
     def reset(self):
         self._assert_not_closed()
@@ -82,7 +83,7 @@ class SubprocVecEnv(VecEnv):
             remote.send(('reset', None))
         results = [remote.recv() for remote in self.remotes]
         obs, metrics = zip(*results)
-        return _flatten_obs(obs), _flatten_obs(metrics)
+        return torch.stack(obs), torch.stack(metrics)
 
     def close_extras(self):
         self.closed = True
@@ -107,13 +108,3 @@ class SubprocVecEnv(VecEnv):
     def __del__(self):
         if not self.closed:
             self.close()
-
-def _flatten_obs(obs):
-    assert isinstance(obs, (list, tuple))
-    assert len(obs) > 0
-
-    if isinstance(obs[0], dict):
-        keys = obs[0].keys()
-        return {k: np.stack([o[k] for o in obs]) for k in keys}
-    else:
-        return np.stack(obs)

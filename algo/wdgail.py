@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data
 from torch import autograd
+from torchvision import transforms
 
 from tools.model import ProcessObsFeatures, ProcessMetrics, ProcessAction
 import torch.optim as optim
@@ -18,7 +19,6 @@ class Discriminator(nn.Module):
     def __init__(self, state_shape, metrics_space, action_space, hidden_dim, device, lr, eps, betas, max_grad_norm=None):
         super(Discriminator, self).__init__()
         self.device = device
-        C, H, W = state_shape
 
         self.obs_processor = ProcessObsFeatures(state_shape)
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
@@ -36,6 +36,22 @@ class Discriminator(nn.Module):
                                     lr=lr, betas=betas, eps=eps)
         self.returns = None
         self.ret_rms = RunningMeanStd(shape=())
+
+    def forward(self, state, metrics, action, gp=False):
+        state = state.to(self.device)
+        metrics = metrics.to(self.device)
+        action = action.to(self.device)
+
+        state_features, state_transformed = self.obs_processor(state)
+        metrics_features, metrics_transformed = self.metrics_processor(metrics)
+        action_features, action_transformed = self.action_processor(action)
+        cat_features = torch.cat(
+            [state_features, metrics_features, action_features], dim=1)
+        output = self.trunk(cat_features)
+        if gp:
+            return output, state_transformed, metrics_transformed, action_transformed
+        else:
+            return output
 
     def compute_grad_pen(self,
                          expert_state,
@@ -63,14 +79,7 @@ class Discriminator(nn.Module):
         mixup_action = alpha_action * expert_action + \
             (1 - alpha_action) * policy_action
 
-        mixup_state_features, mixup_state_transformed = self.obs_processor(mixup_state)
-        mixup_metrics_features, mixup_metrics_transformed = self.metrics_processor(mixup_metrics)
-        mixup_action_features, mixup_action_transformed = self.action_processor(mixup_action)
-        
-        mixup_data = torch.cat(
-            [mixup_state_features, mixup_metrics_features, mixup_action_features], dim=1)
-
-        disc = self.trunk(mixup_data)
+        disc, mixup_state_transformed, mixup_metrics_transformed, mixup_action_transformed = self.forward(mixup_state, mixup_metrics, mixup_action, gp=True)
         ones = torch.ones(disc.size()).to(disc.device)
 
         grad = autograd.grad(
@@ -104,57 +113,32 @@ class Discriminator(nn.Module):
                                               policy_data_generator):
             policy_state, policy_metrics, policy_action = policy_batch[
                 0], policy_batch[1], policy_batch[2]
-            policy_state = policy_state.to(self.device)
-            policy_metrics = policy_metrics.to(self.device)
-            policy_action = policy_action.to(self.device)
-
-            policy_state_features, _ = self.obs_processor(policy_state)
-            policy_metrics_features, _ = self.metrics_processor(policy_metrics)
-            policy_action_features, _ = self.action_processor(policy_action)
-
-            policy_d = self.trunk(
-                torch.cat([policy_state_features,  policy_metrics_features, policy_action_features], dim=1))
+            policy_d = self.forward(policy_state, policy_metrics, policy_action)
             policy_reward += policy_d.sum().item()
 
             expert_state, expert_metrics, expert_action = expert_batch
 
-            expert_state = expert_state.to(self.device)
-            expert_metrics = expert_metrics.to(self.device)
-            expert_action = expert_action.to(self.device)
-
-            expert_state_features, _ = self.obs_processor(expert_state)
-            expert_metrics_features, _ = self.metrics_processor(expert_metrics)
-            expert_action_features, _ = self.action_processor(expert_action)
-
-            expert_d = self.trunk(
-                torch.cat([expert_state_features, expert_metrics_features, expert_action_features], dim=1))
+            expert_d = self.forward(expert_state, expert_metrics, expert_action)
             expert_reward += expert_d.sum().item()
 
-            # expert_loss = F.binary_cross_entropy_with_logits(
-            #     expert_d,
-            #     torch.ones(expert_d.size()).to(self.device))
-            # policy_loss = F.binary_cross_entropy_with_logits(
-            #     policy_d,
-            #     torch.zeros(policy_d.size()).to(self.device))
             expert_loss = torch.mean(torch.tanh(expert_d)).to(self.device)
             policy_loss = torch.mean(torch.tanh(policy_d)).to(self.device)
 
             n_samples = policy_state.shape[0]
             expert_ac_loss += (expert_loss).item() * n_samples
             policy_ac_loss += (policy_loss).item() * n_samples
-            # gail_loss = expert_loss + policy_loss
+
             wd = expert_loss - policy_loss
             grad_pen = self.compute_grad_pen(expert_state, expert_metrics, expert_action,
                                              policy_state, policy_metrics, policy_action)
 
-            # loss += (gail_loss + grad_pen).item()
             loss += (-wd + grad_pen).item() * n_samples
             g_loss += (wd).item() * n_samples
             gp += (grad_pen).item() * n_samples
             n += n_samples
 
             self.optimizer.zero_grad()
-            # (gail_loss + grad_pen).backward()
+
             (-wd + grad_pen).backward()
             nn.utils.clip_grad_norm_(
                 self.parameters(), self.max_grad_norm)
@@ -175,28 +159,12 @@ class Discriminator(nn.Module):
                                                   policy_data_generator):
                 policy_state, policy_metrics, policy_action = policy_batch[
                     0], policy_batch[1], policy_batch[2]
-                policy_state = policy_state.to(self.device)
-                policy_metrics = policy_metrics.to(self.device)
-                policy_action = policy_action.to(self.device)
-
-                policy_state_features, _ = self.obs_processor(policy_state)
-                policy_metrics_features, _ = self.metrics_processor(policy_metrics)
-                policy_action_features, _ = self.action_processor(policy_action)
-
-                policy_d = self.trunk(
-                    torch.cat([policy_state_features, policy_metrics_features, policy_action_features], dim=1))
+                policy_d = self.forward(policy_state, policy_metrics, policy_action)
 
                 expert_state, expert_metrics, expert_action = expert_batch
-                expert_state = expert_state.to(self.device)
-                expert_metrics = expert_metrics.to(self.device)
-                expert_action = expert_action.to(self.device)
 
-                expert_state_features, _ = self.obs_processor(expert_state)
-                expert_metrics_features, _ = self.metrics_processor(expert_metrics)
-                expert_action_features, _ = self.action_processor(expert_action)
+                expert_d = self.forward(expert_state, expert_metrics, expert_action)
 
-                expert_d = self.trunk(
-                    torch.cat([expert_state_features, expert_metrics_features, expert_action_features], dim=1))
                 expert_loss = torch.tanh(expert_d)
                 policy_loss = torch.tanh(policy_d)
                 expert_reward += expert_loss.sum().item()
@@ -212,24 +180,12 @@ class Discriminator(nn.Module):
 
     def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
         with torch.no_grad():
-            state_features, _ = self.obs_processor(state)
-            metrics_features, _ = self.metrics_processor(metrics)
-            action_features, _ = self.action_processor(action)
+            d = self.forward(state, metrics, action)
 
-            d = self.trunk(
-                torch.cat([state_features, metrics_features, action_features], dim=1))
             s = torch.sigmoid(d)
             reward = -(1 - s).log()
             reward = reward.cpu()
 
-            # if self.returns is None:
-            #     self.returns = reward.clone()
-
-            # if update_rms:
-            #     self.returns = self.returns * masks * gamma + reward
-            #     self.ret_rms.update(self.returns.cpu().numpy())
-
-            # return reward / np.sqrt(self.ret_rms.var[0] + 1e-8)
             return reward
 
 
@@ -256,7 +212,9 @@ class ExpertDataset(torch.utils.data.Dataset):
         self.trajs_actions = torch.stack(self.trajs_actions)
         self.trajs_metrics = torch.stack(self.trajs_metrics)
         self.actual_obs = [None for _ in range(self.length)]
-
+        self.preprocess = transforms.Compose([
+            transforms.ToTensor()
+        ])
     def __len__(self):
         return self.length
 
@@ -268,12 +226,15 @@ class ExpertDataset(torch.utils.data.Dataset):
             rgb = Image.open(ep_dir / 'rgb/{:0>4d}.png'.format(step_idx))
             rgb_left = Image.open(ep_dir / 'rgb_left/{:0>4d}.png'.format(step_idx))
             rgb_right = Image.open(ep_dir / 'rgb_right/{:0>4d}.png'.format(step_idx))
-            rgb = np.transpose(rgb, (2, 0, 1))
-            rgb_left = np.transpose(rgb_left, (2, 0, 1))
-            rgb_right = np.transpose(rgb_right, (2, 0, 1))
-            obs = np.concatenate((rgb, rgb_left, rgb_right))
+            rgb = rgb.convert("RGB")
+            rgb_left = rgb_left.convert("RGB")
+            rgb_right = rgb_right.convert("RGB")
+            rgb = self.preprocess(rgb)
+            rgb_left = self.preprocess(rgb_left)
+            rgb_right = self.preprocess(rgb_right)
+            obs = torch.cat([rgb, rgb_left, rgb_right])
             self.actual_obs[j] = obs
         else:
             obs = self.actual_obs[j]
 
-        return torch.from_numpy(obs).float(), self.trajs_metrics[j], self.trajs_actions[j]
+        return obs, self.trajs_metrics[j], self.trajs_actions[j]

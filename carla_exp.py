@@ -55,7 +55,7 @@ def gen_trajectories(routes_file=''):
                 ]
                 action = auto_pilot.run_step(ego_metrics)
 
-                metrics_ep.append(step_metrics)
+                metrics_ep.append(step_metrics.numpy())
                 actions_ep.append(action)
                 Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
                 Image.fromarray(env.env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
@@ -65,7 +65,7 @@ def gen_trajectories(routes_file=''):
                 _, step_metrics, _, _, _ = env.step(action)
                 i_step += 1
 
-            metrics_ep.append(step_metrics)
+            metrics_ep.append(step_metrics.numpy())
             actions_ep.append(action)
 
             Image.fromarray(env.env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
