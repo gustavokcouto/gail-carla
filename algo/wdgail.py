@@ -31,8 +31,6 @@ class Discriminator(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
-        self.train()
-
         self.max_grad_norm = max_grad_norm
         self.optimizer = optim.Adam(self.parameters(),
                                     lr=lr, betas=betas, eps=eps)
@@ -91,8 +89,6 @@ class Discriminator(nn.Module):
         return grad_pen
 
     def update(self, expert_loader, rollouts):
-        self.train()
-
         policy_data_generator = rollouts.feed_forward_generator(
             None, mini_batch_size=expert_loader.batch_size, only_last_cycle=True)
 
@@ -216,8 +212,6 @@ class Discriminator(nn.Module):
 
     def predict_reward(self, state, metrics, action, gamma, masks, update_rms=True):
         with torch.no_grad():
-            self.eval()
-
             state_features, _ = self.obs_processor(state)
             metrics_features, _ = self.metrics_processor(metrics)
             action_features, _ = self.action_processor(action)

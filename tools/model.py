@@ -99,7 +99,6 @@ class CNNBase(nn.Module):
         self.logstd = torch.Tensor(logstd)
 
         self.activation = activation
-        self.train()
 
     def forward(self, obs, metrics):
         obs_features, _ = self.obs_processor(obs)
