@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tools.utils import init
-from torchvision.models.resnet import resnet18, resnet50
+from torchvision.models.resnet import resnet18, resnet34
 from torchvision import transforms
 
 
@@ -54,49 +54,16 @@ class Policy(nn.Module):
 
 
 class CNNBase(nn.Module):
-    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, multi_head, hidden_size=512):
+    def __init__(self, obs_shape, metrics_space, num_outputs, activation, logstd, multi_head):
         super(CNNBase, self).__init__()
 
         self.obs_processor = ProcessObsFeatures(obs_shape)
+
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
-
-        self.multi_head = multi_head
-
-        if self.multi_head:
-            self.head_0 = nn.Sequential(
-                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-                nn.LeakyReLU(0.2),
-                nn.Linear(hidden_size, num_outputs)
-            )
-            self.head_1 = nn.Sequential(
-                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-                nn.LeakyReLU(0.2),
-                nn.Linear(hidden_size, num_outputs)
-            )
-            self.head_2 = nn.Sequential(
-                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-                nn.LeakyReLU(0.2),
-                nn.Linear(hidden_size, num_outputs)
-            )
-            self.head_3 = nn.Sequential(
-                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-                nn.LeakyReLU(0.2),
-                nn.Linear(hidden_size, num_outputs)
-            )
-
-            self.value_head = nn.Sequential(
-                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-                nn.LeakyReLU(0.2),
-                nn.Linear(hidden_size, 1)
-            )
-
-        else:
-            self.head = nn.Sequential(
-                nn.Linear(self.obs_processor.output_dim + self.metrics_processor.output_dim, hidden_size),
-                nn.LeakyReLU(0.2),
-                nn.Linear(hidden_size, num_outputs + 1)
-            )
-
+        hidden_size = 512
+        self.body = NNBody(self.obs_processor.output_dim +
+                           self.metrics_processor.output_dim, hidden_size)
+        self.head = NNHead(hidden_size, num_outputs, value=True)
         self.logstd = torch.Tensor(logstd)
 
         self.activation = activation
@@ -105,34 +72,63 @@ class CNNBase(nn.Module):
         obs_features, _ = self.obs_processor(obs)
         metrics_features, _ = self.metrics_processor(metrics)
         cat_features = torch.cat([obs_features, metrics_features], dim=1)
-
-        if self.multi_head:
-            head_outputs = []
-            for output_head in [self.head_0, self.head_1, self.head_2, self.head_3]:
-                head_output = output_head(cat_features)
-                head_output = head_output.unsqueeze(dim=1)
-                head_outputs.append(head_output)
-            head_outputs = torch.cat(head_outputs, dim=1)
-
-            road_options = metrics[:, 3].long()
-            road_options -= 1
-            n_range = torch.arange(head_outputs.size(0))
-            n_range = n_range.to(road_options).long()
-            output = head_outputs[n_range, road_options]
-            critic = self.value_head(cat_features)
-        else:
-            nn_output = self.head(cat_features)
-            critic = nn_output[...,0].unsqueeze(dim=1)
-            output = nn_output[...,1:]
+        body_features = self.body(cat_features)
+        road_options = metrics[:, 3].long()
+        road_options -= 1
+        critic, output = self.head(body_features, road_options)
 
         if self.activation:
-            output[...,0] = torch.tanh(output[...,0])
-            output[...,1] = torch.sigmoid(output[...,1])
+            output[..., 0] = torch.tanh(output[..., 0])
+            output[..., 1] = torch.sigmoid(output[..., 1])
         zeros = torch.zeros(output.size()).to(output)
         logstd = self.logstd.to(output)
         logstd = logstd + zeros
         return critic, output, logstd
 
+
+class NNBody(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(NNBody, self).__init__()
+        hidden_size = 512
+        self.body = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, output_size),
+            nn.LeakyReLU(0.2),
+        )
+        self.output_size = output_size
+
+    def forward(self, input):
+        output = self.body(input)
+        return output
+
+
+class NNHead(nn.Module):
+    def __init__(self, input_size, output_size, value=False):
+        super(NNHead, self).__init__()
+        hidden_size = 256
+        self.head = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, output_size)
+        )
+        self.value = value
+        if self.value:
+            self.value_branch = nn.Sequential(
+                nn.Linear(input_size, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, 1),
+            )
+
+    def forward(self, input, command):
+        output = self.head(input)
+        if self.value:
+            value = self.value_branch(input)
+            return value, output
+        else:
+            return output
 
 
 class ProcessObsFeatures(nn.Module):
@@ -229,3 +225,28 @@ class ProcessAction(nn.Module):
         action_transformed.requires_grad = True
 
         return action_transformed, action_transformed
+
+
+class ProcessObsFeaturesResnet(nn.Module):
+    def __init__(self, obs_shape, resnet_34=False):
+        super(ProcessObsFeaturesResnet, self).__init__()
+        in_channels = obs_shape[0]
+        self.main = resnet34(pretrained=True).eval()
+        self.main.fc = nn.Identity()
+        self.output_dim = 512 * 3
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225])
+
+    def forward(self, obs):
+        # scale observation
+        obs_transformed = obs.clone()
+        with torch.no_grad():
+            obs_left = self.normalize(obs_transformed[:, :3])
+            obs_center = self.normalize(obs_transformed[:, 3:6])
+            obs_right = self.normalize(obs_transformed[:, 6:])
+            left_feat = self.main(obs_left)
+            center_feat = self.main(obs_center)
+            right_feat = self.main(obs_right)
+            obs_features = torch.cat([left_feat, center_feat, right_feat], dim=1)
+
+        return obs_features, obs_transformed
