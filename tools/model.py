@@ -75,7 +75,7 @@ class CNNBase(nn.Module):
         body_features = self.body(cat_features)
         road_options = metrics[:, 3].long()
         road_options -= 1
-        critic, output = self.head(body_features, road_options)
+        critic, output = self.head(body_features)
 
         if self.activation:
             output[..., 0] = torch.tanh(output[..., 0])
@@ -109,24 +109,21 @@ class NNHead(nn.Module):
     def __init__(self, input_size, output_size, value=False):
         super(NNHead, self).__init__()
         hidden_size = 256
+        self.value = value
+
+        if self.value:
+            output_size += 1
+
         self.head = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_size, output_size)
         )
-        self.value = value
-        if self.value:
-            self.value_branch = nn.Sequential(
-                nn.Linear(input_size, hidden_size),
-                nn.LeakyReLU(0.2),
-                nn.Linear(hidden_size, 1),
-            )
 
-    def forward(self, input, command):
+    def forward(self, input):
         output = self.head(input)
         if self.value:
-            value = self.value_branch(input)
-            return value, output
+            return output[..., 0].unsqueeze(dim=1), output[..., 1:]
         else:
             return output
 
