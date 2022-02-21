@@ -63,7 +63,7 @@ class CNNBase(nn.Module):
         hidden_size = 512
         self.body = NNBody(self.obs_processor.output_dim +
                            self.metrics_processor.output_dim, hidden_size)
-        self.head = NNHead(hidden_size, num_outputs, value=True)
+        self.head = NNBranchedHead(hidden_size, num_outputs, value=True)
         self.logstd = torch.Tensor(logstd)
 
         self.activation = activation
@@ -75,7 +75,7 @@ class CNNBase(nn.Module):
         body_features = self.body(cat_features)
         road_options = metrics[:, 3].long()
         road_options -= 1
-        critic, output = self.head(body_features)
+        critic, output = self.head(body_features, road_options)
 
         if self.activation:
             output[..., 0] = torch.tanh(output[..., 0])
@@ -128,6 +128,51 @@ class NNHead(nn.Module):
             return output
 
 
+class NNBranchedHead(nn.Module):
+    def __init__(self, input_size, output_size, value=False):
+        super(NNBranchedHead, self).__init__()
+        number_of_branches = 6
+        branch_vector = []
+        hidden_size = 256
+        for i in range(number_of_branches):
+            branch_head = nn.Sequential(
+                nn.Linear(input_size, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, hidden_size),
+                nn.Dropout(0.5),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, output_size),
+            )
+            branch_vector.append(branch_head)
+        self.branched_modules = nn.ModuleList(branch_vector)
+
+        self.value = value
+        if self.value:
+            self.value_branch = nn.Sequential(
+                nn.Linear(input_size, hidden_size),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, hidden_size),
+                nn.Dropout(0.5),
+                nn.LeakyReLU(0.2),
+                nn.Linear(hidden_size, 1),
+            )
+
+    def forward(self, input, command):
+        branches_outputs = []
+        for branch in self.branched_modules:
+            branches_outputs.append(branch(input))
+
+        branches_outputs = torch.stack(branches_outputs)
+        command = command.type(torch.LongTensor)
+        branch_number = torch.LongTensor(range(0, command.size(0)))
+        output = branches_outputs[command, branch_number, :]
+        if self.value:
+            value = self.value_branch(input)
+            return value, output
+        else:
+            return output
+
+
 class ProcessObsFeatures(nn.Module):
     def __init__(self, obs_shape):
         super(ProcessObsFeatures, self).__init__()
@@ -165,52 +210,44 @@ class ProcessObsFeatures(nn.Module):
 
 
 class ProcessMetrics(nn.Module):
-    def __init__(self, metrics_shape):
+    def __init__(self, metrics_shape, command=False):
         super(ProcessMetrics, self).__init__()
 
-        road_option_embedding_dimension = 8
-        max_road_options = 10
-        self.road_option_embedding = nn.Embedding(max_road_options, road_option_embedding_dimension)
         # target x, y, r, theta
-        target_shape = 4
-        speed_shape = 1
-        self.output_dim = target_shape + speed_shape + road_option_embedding_dimension
+        hidden_size = 128
+        self.output_dim = hidden_size
+        input_dim = 1
+        self.command = command
+        if self.command:
+            road_option_embedding_dimension = 8
+            max_road_options = 10
+            self.road_option_embedding = nn.Embedding(max_road_options, road_option_embedding_dimension)
+            input_dim += road_option_embedding_dimension
+
+        self.main = nn.Sequential(
+            nn.Linear(input_dim, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, hidden_size),
+            nn.LeakyReLU(0.2)
+        )
 
     def forward(self, metrics):
         # metrics composition [target[0], target[1], speed, int(road_option)]
 
-        metrics_copy = metrics.clone().cpu().numpy()
-        target_x = metrics_copy[:, 0]
-        target_y = metrics_copy[:, 1]
-        target_r = np.sqrt(target_x * target_x + target_y * target_y)
-        target_theta = np.arctan2(target_y, target_x) 
-
-        # scale target x and y by 1000
-        metrics_target_x = 1000 * torch.from_numpy(target_x).float().unsqueeze(dim=1)
-        metrics_target_y = 1000 * torch.from_numpy(target_y).float().unsqueeze(dim=1)
-
-        # scale target radius by 1000
-        metrics_target_r = 1000 * torch.from_numpy(target_r).float().unsqueeze(dim=1)
-
-        # scale target theta by 0.3
-        metrics_target_theta = 0.3 * torch.from_numpy(target_theta).float().unsqueeze(dim=1)
-
         # max speed of 60m/s or 216km/h
-        speed = metrics_copy[:, 2]
-
-        # scale speed by 0.1
-        metrics_speed = 0.1 * torch.from_numpy(speed).float().unsqueeze(dim=1)
-
-        road_options = metrics_copy[:, 3]
-        road_options_tensor = torch.from_numpy(road_options).long().to(metrics.device)
-        road_option_features = self.road_option_embedding(road_options_tensor)
-
-        metrics_transformed = torch.cat([metrics_target_x, metrics_target_y, metrics_target_r, metrics_target_theta, metrics_speed], dim=1).clone().to(metrics.device)
+        speed = 0.1 * metrics[:, 2].unsqueeze(dim=1)
+        metrics_transformed = speed.clone()
         metrics_transformed.requires_grad = True
 
-        metrics_transformed = torch.cat([metrics_transformed, road_option_features], dim=1)
+        if self.command:
+            road_options = metrics[:, 3].long()
+            road_option_features = self.road_option_embedding(road_options)
+            metrics_transformed = torch.cat([metrics_transformed, road_option_features], dim=1)
 
-        return metrics_transformed, metrics_transformed
+        metrics_features = self.main(metrics_transformed)
+
+        return metrics_features, metrics_transformed
+
 
 class ProcessAction(nn.Module):
     def __init__(self, action_shape):
