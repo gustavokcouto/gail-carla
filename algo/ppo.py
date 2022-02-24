@@ -39,6 +39,8 @@ class PPO():
 
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
+        self.entropy_coef = 0.00
+        self.explore_coef = 0.05
 
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps, betas=betas)
 
@@ -74,7 +76,7 @@ class PPO():
                 adv_targ = adv_targ.to(self.device)
 
                 # Reshape to do in a single forward pass for all steps
-                values, action_log_probs, dist_entropy, steer_std, throttle_std = self.actor_critic.evaluate_actions(
+                values, action_log_probs, dist_entropy, exploration_loss, steer_std, throttle_std = self.actor_critic.evaluate_actions(
                     obs_batch, metrics_batch, actions_batch)
 
                 ratio = torch.exp(action_log_probs -
@@ -91,7 +93,7 @@ class PPO():
                         exp_metrics = Variable(exp_metrics).to(action_loss.device)
                         exp_action = Variable(exp_action).to(action_loss.device)
                         # Get BC loss
-                        _, alogprobs, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, exp_action)
+                        _, alogprobs, _, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, exp_action)
                         bcloss = -alogprobs.mean()
 
                         bc_loss_epoch += bcloss.item()
@@ -113,7 +115,7 @@ class PPO():
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                 self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss).backward()
+                (value_loss * self.value_loss_coef + action_loss - dist_entropy * self.entropy_coef).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
                 self.optimizer.step()
@@ -121,8 +123,8 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
-                steer_std_epoch += steer_std.item()
-                throttle_std_epoch += throttle_std.item()
+                steer_std_epoch += steer_std
+                throttle_std_epoch += throttle_std
                 n_updates += 1
 
         value_loss_epoch /= n_updates

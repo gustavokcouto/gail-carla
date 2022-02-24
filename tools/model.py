@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from tools.utils import init
 from torchvision.models.resnet import resnet18, resnet34
 from torchvision import transforms
-
+from tools.distributions import DiagGaussianDistribution
 
 class Flatten(nn.Module):
     def forward(self, x):
@@ -23,34 +23,39 @@ class Policy(nn.Module):
         self.min = torch.Tensor([-1, 0])
 
     def act(self, obs, metrics, deterministic=False):
-        value, output, logstd = self.base(obs, metrics)
-        dist = torch.distributions.Normal(output, logstd.exp())
-        if deterministic:
-            action = dist.mean
-        else:
-            action = dist.sample()
+        value, dist = self.base(obs, metrics)
+        action = dist.get_actions(deterministic=deterministic)
 
-        # action = torch.max(torch.min(action, self.max.to(action)), self.min.to(action))
-        action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
-
+        action_log_probs = dist.distribution.log_prob(action).sum(-1, keepdim=True)
+        action = self.unscale_action(action)
         return value, action, action_log_probs
 
     def set_epoch(self,epoch):
         self.base.set_epoch(epoch)
 
     def get_value(self, obs, metrics):
-        value, _, _ = self.base(obs, metrics)
+        value, _ = self.base(obs, metrics)
         return value
 
     def evaluate_actions(self, obs, metrics, action):
-        value, output, logstd = self.base(obs, metrics)
-        dist = torch.distributions.Normal(output, logstd.exp())
-
+        value, distribution = self.base(obs, metrics)
+        dist = distribution.distribution
+        action = self.scale_action(action)
         action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
         dist_entropy = dist.entropy().sum(-1).mean()
-        steer_std = logstd[0, 0].detach().cpu()
-        throttle_std = logstd[0, 1].detach().cpu()
-        return value, action_log_probs, dist_entropy, steer_std, throttle_std
+        steer_std = 0
+        throttle_std = 0
+        exploration_loss = 0
+        return value, action_log_probs, dist_entropy, exploration_loss, steer_std, throttle_std
+
+    def scale_action(self, action, eps=1e-7):
+        # action[..., 0] = (action[..., 0] + 1) / 2
+        # action = torch.clamp(action, eps, 1-eps)
+        return action
+
+    def unscale_action(self, action):
+        # action[..., 0] = action[..., 0] * 2 - 1
+        return action
 
 
 class CNNBase(nn.Module):
@@ -60,10 +65,12 @@ class CNNBase(nn.Module):
         self.obs_processor = ProcessObsFeatures(obs_shape)
 
         self.metrics_processor = ProcessMetrics(metrics_space.shape[0])
-        hidden_size = 512
+        hidden_size = 256
         self.body = NNBody(self.obs_processor.output_dim +
                            self.metrics_processor.output_dim, hidden_size)
-        self.head = NNHead(hidden_size, num_outputs, value=True)
+        self.head = NNPolicyHead(hidden_size, hidden_size)
+        self.action_dist = DiagGaussianDistribution()
+        self.dist_mu, self.dist_sigma = self.action_dist.proba_distribution_net(hidden_size)
         self.logstd = torch.Tensor(logstd)
 
         self.activation = activation
@@ -73,17 +80,16 @@ class CNNBase(nn.Module):
         metrics_features, _ = self.metrics_processor(metrics)
         cat_features = torch.cat([obs_features, metrics_features], dim=1)
         body_features = self.body(cat_features)
-        road_options = metrics[:, 3].long()
-        road_options -= 1
-        critic, output = self.head(body_features)
-
-        if self.activation:
-            output[..., 0] = torch.tanh(output[..., 0])
-            output[..., 1] = torch.sigmoid(output[..., 1])
-        zeros = torch.zeros(output.size()).to(output)
-        logstd = self.logstd.to(output)
-        logstd = logstd + zeros
-        return critic, output, logstd
+        critic, head_output = self.head(body_features)
+        mu = self.dist_mu(head_output)
+        mu[..., 0] = torch.tanh(mu[..., 0])
+        mu[..., 1] = torch.sigmoid(mu[..., 1])
+        if isinstance(self.dist_sigma, nn.Parameter):
+            sigma = self.dist_sigma
+        else:
+            sigma = self.dist_sigma(head_output)
+        distribution = self.action_dist.proba_distribution(mu, sigma)
+        return critic, distribution
 
 
 class NNBody(nn.Module):
@@ -92,8 +98,6 @@ class NNBody(nn.Module):
         hidden_size = 512
         self.body = nn.Sequential(
             nn.Linear(input_size, hidden_size),
-            nn.LeakyReLU(0.2),
-            nn.Linear(hidden_size, hidden_size),
             nn.LeakyReLU(0.2),
             nn.Linear(hidden_size, output_size),
             nn.LeakyReLU(0.2),
@@ -105,14 +109,11 @@ class NNBody(nn.Module):
         return output
 
 
+
 class NNHead(nn.Module):
-    def __init__(self, input_size, output_size, value=False):
+    def __init__(self, input_size, output_size):
         super(NNHead, self).__init__()
         hidden_size = 256
-        self.value = value
-
-        if self.value:
-            output_size += 1
 
         self.head = nn.Sequential(
             nn.Linear(input_size, hidden_size),
@@ -122,10 +123,31 @@ class NNHead(nn.Module):
 
     def forward(self, input):
         output = self.head(input)
-        if self.value:
-            return output[..., 0].unsqueeze(dim=1), output[..., 1:]
-        else:
-            return output
+        return output
+
+
+class NNPolicyHead(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(NNPolicyHead, self).__init__()
+        hidden_size = 256
+
+        self.policy_head = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, output_size),
+            nn.LeakyReLU(0.2)
+        )
+
+        self.value_head = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_size, 1)
+        )
+
+    def forward(self, input):
+        output = self.policy_head(input)
+        value = self.value_head(input)
+        return value, output
 
 
 class ProcessObsFeatures(nn.Module):
