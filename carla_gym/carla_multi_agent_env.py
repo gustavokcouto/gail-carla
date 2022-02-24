@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class CarlaMultiAgentEnv(gym.Env):
     def __init__(self, carla_map, host, port, seed, no_rendering,
-                 obs_configs, reward_configs, terminal_configs, all_tasks):
+                 obs_configs, reward_configs, terminal_configs, all_tasks, train=False):
         self._all_tasks = all_tasks
         self._obs_configs = obs_configs
         self._carla_map = carla_map
@@ -29,11 +29,11 @@ class CarlaMultiAgentEnv(gym.Env):
 
         # define observation spaces exposed to agent
         self._om_handler = ObsManagerHandler(obs_configs)
-        self._ev_handler = EgoVehicleHandler(self._client, reward_configs, terminal_configs)
+        self._ev_handler = EgoVehicleHandler(self._client, reward_configs, terminal_configs, train=train)
         self._zw_handler = ZombieWalkerHandler(self._client)
         self._zv_handler = ZombieVehicleHandler(self._client, tm_port=self._tm.get_port())
         self._sa_handler = ScenarioActorHandler(self._client)
-        self._wt_handler = WeatherHandler(self._world)
+        # self._wt_handler = WeatherHandler(self._world)
 
         # observation spaces
         self.observation_space = self._om_handler.observation_space
@@ -68,7 +68,7 @@ class CarlaMultiAgentEnv(gym.Env):
             self._task = self._all_tasks[self._task_idx].copy()
         self.clean()
 
-        self._wt_handler.reset(self._task['weather'])
+        # self._wt_handler.reset(self._task['weather'])
         logger.debug("_wt_handler reset done!!")
 
         ev_spawn_locations = self._ev_handler.reset(self._task['ego_vehicles'])
@@ -128,7 +128,7 @@ class CarlaMultiAgentEnv(gym.Env):
         obs_dict = self._om_handler.get_observation(self.timestamp)
 
         # update weather
-        self._wt_handler.tick(snap_shot.timestamp.delta_seconds)
+        # self._wt_handler.tick(snap_shot.timestamp.delta_seconds)
 
         # num_walkers = len(self._world.get_actors().filter("*walker.pedestrian*"))
         # num_vehicles = len(self._world.get_actors().filter("vehicle*"))
@@ -202,5 +202,5 @@ class CarlaMultiAgentEnv(gym.Env):
         self._zv_handler.clean()
         self._om_handler.clean()
         self._ev_handler.clean()
-        self._wt_handler.clean()
+        # self._wt_handler.clean()
         self._world.tick()

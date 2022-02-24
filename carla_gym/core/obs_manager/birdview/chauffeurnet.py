@@ -232,8 +232,9 @@ class ObsManager(ObsManagerBase):
         for sp_locs in stopline_vtx:
             stopline_in_pixel = np.array([[self._world_to_pixel(x)] for x in sp_locs])
             stopline_warped = cv.transform(stopline_in_pixel, M_warp)
-            cv.line(mask, tuple(stopline_warped[0, 0]), tuple(stopline_warped[1, 0]),
-                    color=1, thickness=6)
+            point_1 = int(stopline_warped[0, 0, 0]), int(stopline_warped[0, 0, 1])
+            point_2 = int(stopline_warped[1, 0, 0]), int(stopline_warped[1, 0, 1])
+            cv.line(mask, point_1, point_2, color=1, thickness=6)
         return mask.astype(np.bool)
 
     def _get_mask_from_actor_list(self, actor_list, M_warp):

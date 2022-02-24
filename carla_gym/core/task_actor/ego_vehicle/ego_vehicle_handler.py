@@ -10,7 +10,7 @@ PENALTY_STOP = 0.80
 
 
 class EgoVehicleHandler(object):
-    def __init__(self, client, reward_configs, terminal_configs):
+    def __init__(self, client, reward_configs, terminal_configs, train=False):
         self.ego_vehicles = {}
         self.info_buffers = {}
         self.reward_buffers = {}
@@ -23,6 +23,9 @@ class EgoVehicleHandler(object):
         self._world = client.get_world()
         self._map = self._world.get_map()
         self._spawn_transforms = self._get_spawn_points(self._map)
+        self.last_target_transform = None
+        self.completed_route = False
+        self.train = train
 
     def reset(self, task_config):
         actor_config = task_config['actors']
@@ -38,7 +41,14 @@ class EgoVehicleHandler(object):
             if len(route_config[ev_id]) == 0:
                 spawn_transform = np.random.choice([x[1] for x in self._spawn_transforms])
             else:
-                spawn_transform = route_config[ev_id][0]
+                if self.completed_route or not self.train:
+                    spawn_transform = route_config[ev_id][0]
+                    self.completed_route = False
+                elif self.last_target_transform is None or np.random.choice(10) == 0:
+                    route_start = np.random.choice(len(route_config[ev_id]) - 2)
+                    spawn_transform = route_config[ev_id][route_start]
+                else:
+                    spawn_transform = self.last_target_transform
 
             wp = self._map.get_waypoint(spawn_transform.location)
             spawn_transform.location.z = wp.transform.location.z + 1.321
@@ -92,6 +102,7 @@ class EgoVehicleHandler(object):
 
         for ev_id, ev in self.ego_vehicles.items():
             info_criteria = ev.tick(timestamp)
+            self.last_target_transform = ev._global_route[0][0].transform
             info = info_criteria.copy()
             done, timeout, terminal_reward, terminal_debug = self.terminal_handlers[ev_id].get(timestamp)
             reward, reward_debug = self.reward_handlers[ev_id].get(terminal_reward)
@@ -154,6 +165,7 @@ class EgoVehicleHandler(object):
                 else:
                     if info['route_completion']['is_route_completed']:
                         score_route = 1.0
+                        self.completed_route = True
                     else:
                         score_route = completed_length / total_length
 

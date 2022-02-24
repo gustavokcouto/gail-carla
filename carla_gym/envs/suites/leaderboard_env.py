@@ -6,30 +6,46 @@ import json
 
 class LeaderboardEnv(CarlaMultiAgentEnv):
     def __init__(self, carla_map, host, port, seed, no_rendering, obs_configs, reward_configs, terminal_configs,
-                 weather_group, routes_group):
+                 weather_group, routes_group, train=False):
 
         all_tasks = self.build_all_tasks(carla_map, weather_group, routes_group)
         super().__init__(carla_map, host, port, seed, no_rendering,
-                         obs_configs, reward_configs, terminal_configs, all_tasks)
+                         obs_configs, reward_configs, terminal_configs, all_tasks, train=train)
 
     @staticmethod
     def build_all_tasks(carla_map, weather_group, routes_group):
         assert carla_map in ['Town01', 'Town02', 'Town03', 'Town04', 'Town05', 'Town06']
+        # num_zombie_vehicles = {
+        #     'Town01': 120,
+        #     'Town02': 70,
+        #     'Town03': 70,
+        #     'Town04': 150,
+        #     'Town05': 120,
+        #     'Town06': 120
+        # }
+        # num_zombie_walkers = {
+        #     'Town01': 120,
+        #     'Town02': 70,
+        #     'Town03': 70,
+        #     'Town04': 80,
+        #     'Town05': 120,
+        #     'Town06': 80
+        # }
         num_zombie_vehicles = {
-            'Town01': 120,
-            'Town02': 70,
-            'Town03': 70,
-            'Town04': 150,
-            'Town05': 120,
-            'Town06': 120
+            'Town01': 0,
+            'Town02': 0,
+            'Town03': 0,
+            'Town04': 0,
+            'Town05': 0,
+            'Town06': 0
         }
         num_zombie_walkers = {
-            'Town01': 120,
-            'Town02': 70,
-            'Town03': 70,
-            'Town04': 80,
-            'Town05': 120,
-            'Town06': 80
+            'Town01': 0,
+            'Town02': 0,
+            'Town03': 0,
+            'Town04': 0,
+            'Town05': 0,
+            'Town06': 0
         }
 
         # weather

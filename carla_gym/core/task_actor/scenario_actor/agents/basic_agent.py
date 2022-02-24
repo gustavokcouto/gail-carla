@@ -29,7 +29,7 @@ class BasicAgent(object):
         # target_reached
         target_reached = transform.location.distance(self._dest_transform.location) < self._success_dist
 
-        if vehicle_hazard or pedestrian_ahead or redlight_ahead or target_reached:
+        if False and (vehicle_hazard or pedestrian_ahead or redlight_ahead or target_reached):
             throttle, steer, brake = 0.0, 0.0, 1.0
         else:
             route_plan = self._scenario_vehicle.route_plan
