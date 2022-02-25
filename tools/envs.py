@@ -2,6 +2,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import pandas as pd
+from PIL import Image
 
 from carla_env import CarlaEnv
 from vec_env.vec_env import VecEnvWrapper
@@ -52,7 +53,7 @@ class EnvMonitor():
         self.ep_df = pd.DataFrame()
         self.ep_count = 0
         if not output_path:
-            self.output_path = Path("runs/env_info")
+            self.output_path = Path('runs/env_info/{}'.format(self.env_id))
         else:
             self.output_path = output_path
         self.output_path.mkdir(parents=True, exist_ok=True)
@@ -67,8 +68,10 @@ class EnvMonitor():
         info['ep_count'] = self.ep_count
         info['i_epoch'] = EnvEpoch.get_epoch()
         self.ep_df = self.ep_df.append(info, ignore_index=True)
+        Image.fromarray(self.env.birdview).save(self.ep_output_path / '{:0>4d}.png'.format(self.i_step))
+        self.i_step += 1
         return obs, metrics, reward, done, info
-    
+
     def reset(self):
         obs, metrics = self.env.reset()
         if self.ep_count < 2:
@@ -83,8 +86,13 @@ class EnvMonitor():
                 mode='a',
                 header=False
             )
+
+        self.ep_output_path = Path(self.output_path / 'ep_{}'.format(self.ep_count))
+        self.ep_output_path.mkdir(parents=True, exist_ok=True)
+
         self.ep_count += 1
         self.ep_df = pd.DataFrame()
+        self.i_step = 0
         return obs, metrics
 
     def close(self):

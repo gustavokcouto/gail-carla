@@ -91,7 +91,7 @@ class CarlaEnv(gym.Env):
         self.route_id = route_id
 
         self.action_space = spaces.Box(low=-10, high=10,
-                                       shape=(3,), dtype=np.float32)
+                                       shape=(2,), dtype=np.float32)
 
         self.observation_space = spaces.Box(low=0, high=255,
                                             shape=(9, 216, 384), dtype=np.uint8)
@@ -120,9 +120,8 @@ class CarlaEnv(gym.Env):
         control = carla.VehicleControl()
 
         if action is not None:
-            control.throttle = float(action[0])
-            control.steer = float(action[1])
-            control.brake = float(action[2])
+            control.steer = float(action[0])
+            control.throttle = float(action[1])
 
         driver_control = {'hero': control}
         new_obs, reward, done, info = self.env.step(driver_control)
@@ -131,6 +130,10 @@ class CarlaEnv(gym.Env):
         self.rgb_left = new_obs['hero']['left_rgb']['data']
         self.rgb_right = new_obs['hero']['right_rgb']['data']
         self.birdview = new_obs['hero']['birdview']['rendered']
+        self.birdview_masks = []
+        for i_channels in range(5):
+            birdview_mask = new_obs['hero']['birdview']['masks'][i_channels * 3: i_channels * 3 + 3, :, :]
+            self.birdview_masks.append(np.transpose(birdview_mask, [1, 2, 0]).astype(np.uint8))
         rgb = Image.fromarray(self.rgb).convert("RGB")
         rgb_left = Image.fromarray(self.rgb_left).convert("RGB")
         rgb_right = Image.fromarray(self.rgb_right).convert("RGB")
@@ -162,6 +165,7 @@ class CarlaEnv(gym.Env):
 
         info = {}
         info['route_id'] = self.route_id
+        info['episode_reward'] = self.episode_reward
         done = done['hero']
         if done:
             info['episode'] = {'r': self.episode_reward, 'l': self.cur_length}
