@@ -1,3 +1,7 @@
+import os
+import time
+
+import carla
 from carla_gym.core.task_actor.common.task_vehicle import TaskVehicle
 import numpy as np
 from importlib import import_module
@@ -24,8 +28,18 @@ class EgoVehicleHandler(object):
         self._map = self._world.get_map()
         self._spawn_transforms = self._get_spawn_points(self._map)
         self.last_target_transform = None
+        self.last_route_len = None
         self.completed_route = False
         self.train = train
+        np.random.seed((os.getpid() * int(time.time())) % 123456789)
+
+    @staticmethod
+    def _compute_route_length(route):
+        length_in_m = 0.0
+        for i in range(len(route)-1):
+            d = route[i].location.distance(route[i+1].location)
+            length_in_m += d
+        return length_in_m
 
     def reset(self, task_config):
         actor_config = task_config['actors']
@@ -37,7 +51,8 @@ class EgoVehicleHandler(object):
             bp_filter = actor_config[ev_id]['model']
             blueprint = np.random.choice(self._world.get_blueprint_library().filter(bp_filter))
             blueprint.set_attribute('role_name', ev_id)
-
+            
+            route_start = 0
             if len(route_config[ev_id]) == 0:
                 spawn_transform = np.random.choice([x[1] for x in self._spawn_transforms])
             else:
@@ -48,21 +63,30 @@ class EgoVehicleHandler(object):
                     route_start = np.random.choice(len(route_config[ev_id]) - 2)
                     spawn_transform = route_config[ev_id][route_start]
                 else:
+                    route_start = -self.last_route_len - 1
                     spawn_transform = self.last_target_transform
 
             wp = self._map.get_waypoint(spawn_transform.location)
             spawn_transform.location.z = wp.transform.location.z + 1.321
 
             carla_vehicle = self._world.try_spawn_actor(blueprint, spawn_transform)
+            if carla_vehicle is None:
+                spawn_transform = route_config[ev_id][0]
+                wp = self._map.get_waypoint(spawn_transform.location)
+                spawn_transform.location.z = wp.transform.location.z + 1.321
+                carla_vehicle = self._world.spawn_actor(blueprint, spawn_transform)
+                route_start = 0
+
             self._world.tick()
 
             if endless_config is None:
                 endless = False
             else:
                 endless = endless_config[ev_id]
-            target_transforms = route_config[ev_id][1:]
-            self.ego_vehicles[ev_id] = TaskVehicle(carla_vehicle, target_transforms, self._spawn_transforms, endless)
+            target_transforms = route_config[ev_id][route_start + 1:]
 
+            self.ego_vehicles[ev_id] = TaskVehicle(carla_vehicle, target_transforms, self._spawn_transforms, endless)
+            self.route_length_in_m = self._compute_route_length(route_config[ev_id])
             self.reward_handlers[ev_id] = self._build_instance(
                 self._reward_configs[ev_id], self.ego_vehicles[ev_id])
             self.terminal_handlers[ev_id] = self._build_instance(
@@ -103,7 +127,9 @@ class EgoVehicleHandler(object):
         for ev_id, ev in self.ego_vehicles.items():
             info_criteria = ev.tick(timestamp)
             self.last_target_transform = ev._global_route[0][0].transform
+            self.last_route_len = len(ev._global_route[0])
             info = info_criteria.copy()
+            info['route_completion']['route_length_in_m'] = self.route_length_in_m
             done, timeout, terminal_reward, terminal_debug = self.terminal_handlers[ev_id].get(timestamp)
             reward, reward_debug = self.reward_handlers[ev_id].get(terminal_reward)
 
