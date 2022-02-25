@@ -23,7 +23,7 @@ def gen_trajectories(routes_file=''):
     # Instantiate the env
     np.random.seed(1337)
     ep_max_len = 2400
-    host = 'localhost'
+    host = '192.168.0.4'
     port = 2000
     env = CarlaEnv(host, port, ep_max_len, routes_file, train=False, eval=True, env_id='expert')
     
@@ -31,12 +31,13 @@ def gen_trajectories(routes_file=''):
     expert_file_dir.mkdir(parents=True)
     for route_id in range(1):
         env.env.set_task_idx(route_id)
-        for ep_id in tqdm.tqdm(range(4)):
+        for ep_id in tqdm.tqdm(range(3)):
             episode_dir = expert_file_dir / ('route_%02d' % route_id) / ('ep_%02d' % ep_id)
             (episode_dir / 'rgb').mkdir(parents=True)
             (episode_dir / 'rgb_left').mkdir(parents=True)
             (episode_dir / 'rgb_right').mkdir(parents=True)
             (episode_dir / 'birdview').mkdir(parents=True)
+            (episode_dir / 'birdview_masks').mkdir(parents=True)
             metrics_ep = []
             actions_ep = []
 
@@ -48,21 +49,22 @@ def gen_trajectories(routes_file=''):
 
                 metrics_ep.append(step_metrics.numpy())
                 actions_ep.append(action)
-                Image.fromarray(env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
-                Image.fromarray(env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
-                Image.fromarray(env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
-                Image.fromarray(env.birdview).save(episode_dir / 'birdview' / ('%04d.png' % i_step))
-
+                Image.fromarray(env.rgb_left).save(episode_dir / 'rgb_left' / '{:0>4d}.png'.format(i_step))
+                Image.fromarray(env.rgb).save(episode_dir / 'rgb' / '{:0>4d}.png'.format(i_step))
+                Image.fromarray(env.rgb_right).save(episode_dir / 'rgb_right' / '{:0>4d}.png'.format(i_step))
+                Image.fromarray(env.birdview).save(episode_dir / 'birdview' / '{:0>4d}.png'.format(i_step))
+                for i_mask, birdview_mask in enumerate(env.birdview_masks):
+                    Image.fromarray(birdview_mask).save(episode_dir / 'birdview_masks' / '{:0>4d}_{:0>2d}.png'.format(i_step, i_mask))
                 _, step_metrics, _, _, _ = env.step(action)
                 i_step += 1
 
             metrics_ep.append(step_metrics.numpy())
             actions_ep.append(action)
 
-            Image.fromarray(env.rgb_left).save(episode_dir / 'rgb_left' / ('%04d.png' % i_step))
-            Image.fromarray(env.rgb).save(episode_dir / 'rgb' / ('%04d.png' % i_step))
-            Image.fromarray(env.rgb_right).save(episode_dir / 'rgb_right' / ('%04d.png' % i_step))
-            Image.fromarray(env.birdview).save(episode_dir / 'birdview' / ('%04d.png' % i_step))
+            Image.fromarray(env.rgb_left).save(episode_dir / 'rgb_left' / '{:0>4d}.png'.format(i_step))
+            Image.fromarray(env.rgb).save(episode_dir / 'rgb' / '{:0>4d}.png'.format(i_step))
+            Image.fromarray(env.rgb_right).save(episode_dir / 'rgb_right' / '{:0>4d}.png'.format(i_step))
+            Image.fromarray(env.birdview).save(episode_dir / 'birdview' / '{:0>4d}.png'.format(i_step))
 
             ep_df = pd.DataFrame({
                 'actions': actions_ep,
