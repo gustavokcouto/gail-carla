@@ -43,7 +43,7 @@ class BasicAgent(object):
 
             throttle, steer, brake = self._local_planner.run_step(route_plan, transform, forward_speed)
 
-        return np.array([throttle, steer, brake], dtype=np.float64)
+        return np.array([steer, throttle], dtype=np.float64)
 
     def _is_vehicle_hazard(self, ev_transform, ev_id, vehicle_list):
         ego_vehicle_location = ev_transform.location
