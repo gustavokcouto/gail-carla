@@ -16,13 +16,16 @@ class Leaderboard(object):
         # Done condition 3: route_deviation
         c_route_deviation = info_criteria['route_deviation'] is not None
 
-        # Done condition 4: timeout
+        # Done condition 4: collision
+        c_collision = self._ego_vehicle.info_criteria['collision'] is not None
+
+        # Done condition 5: timeout
         if self._max_time is not None:
             timeout = timestamp['relative_simulation_time'] > self._max_time
         else:
             timeout = False
 
-        done = c_route or c_blocked or c_route_deviation or timeout
+        done = c_route or c_blocked or c_route_deviation or c_collision or timeout
         
         debug_texts = [
             f'cpl:{int(c_route)} dev:{int(c_route_deviation)} blo:{int(c_blocked)} t_out:{int(timeout)}'
@@ -31,6 +34,7 @@ class Leaderboard(object):
         terminal_debug = {
             'blocked': c_blocked,
             'route_deviation': c_route_deviation,
+            'collision': c_collision,
             'debug_texts': debug_texts
         }
 
