@@ -13,3 +13,4 @@ carla_actor.pt
 experiment_results
 paper_plots/**/*[.csv,.eps,.png,.txt]
 **/*.pt
+api_carla
