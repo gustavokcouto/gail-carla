@@ -111,12 +111,12 @@ class ExpertNoiser(object):
 
         # noisy_action = action
         if self.noise_type == 'None':
-            return action, False, False
+            return action
 
         if self.noise_type == 'Spike':
 
-            if self.is_time_for_noise(action.steer):
-                steer = action.steer
+            if self.is_time_for_noise(action[0]):
+                steer = action[0]
 
                 if self.remove_noise:
                     steer_noisy = max(
@@ -128,40 +128,30 @@ class ExpertNoiser(object):
 
                 noisy_action = action
 
-                noisy_action.steer = steer_noisy
+                noisy_action[0] = steer_noisy
 
-                return noisy_action, False, not self.remove_noise
+                return noisy_action
 
             else:
-                return action, False, False
+                return action
 
         if self.noise_type == 'Throttle':
-            if self.is_time_for_noise(action.throttle):
-                throttle_noisy = action.throttle
-                brake_noisy = action.brake
+            if self.is_time_for_noise(action[1]):
+                throttle_noisy = action[1]
 
                 if self.remove_noise:
                     # print(" Throttle noise removing", self.get_noise_removing())
                     noise = self.get_noise_removing()
-                    if noise > 0:
-                        throttle_noisy = max(min(throttle_noisy + noise, 1), 0)
-                    else:
-                        brake_noisy = max(min(brake_noisy + -noise, 1), 0)
+                    throttle_noisy = max(min(throttle_noisy + noise, 1), -1)
 
                 else:
-
-                    # print(" Throttle noise ", self.get_noise())
                     noise = self.get_noise()
-                    if noise > 0:
-                        throttle_noisy = max(min(throttle_noisy + noise, 1), 0)
-                    else:
-                        brake_noisy = max(min(brake_noisy + -noise, 1), 0)
+                    throttle_noisy = max(min(throttle_noisy + noise, 1), -1)
 
                 noisy_action = action
-                noisy_action.throttle = throttle_noisy
-                noisy_action.brake = brake_noisy
+                noisy_action[1] = throttle_noisy
 
                 # print 'timefornosie'
-                return noisy_action, False, not self.remove_noise
+                return noisy_action
             else:
-                return action, False, False
+                return action
