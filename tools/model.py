@@ -151,8 +151,8 @@ class ProcessObsFeatures(nn.Module):
 
         # Get image dim
         self.output_dim = 256*H*W
-        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406, 0.485, 0.456, 0.406, 0.485, 0.456, 0.406],
-                                              std=[0.229, 0.224, 0.225, 0.229, 0.224, 0.225, 0.229, 0.224, 0.225])
+        self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406,],
+                                              std=[0.229, 0.224, 0.225])
 
     def forward(self, obs):
         # scale observation
@@ -212,6 +212,7 @@ class ProcessMetrics(nn.Module):
 
         return metrics_transformed, metrics_transformed
 
+
 class ProcessAction(nn.Module):
     def __init__(self, action_shape):
         super(ProcessAction, self).__init__()
@@ -247,3 +248,32 @@ class ProcessObsFeaturesResnet(nn.Module):
             obs_features = torch.cat([left_feat, center_feat, right_feat], dim=1)
 
         return obs_features, obs_transformed
+
+# class ProcessMetrics(nn.Module):
+#     def __init__(self, metrics_shape):
+#         super(ProcessMetrics, self).__init__()
+
+#         speed_shape = 1
+#         input_size = speed_shape
+#         hidden_size = 128
+#         self.output_dim = 128
+
+#         self.linear = nn.Sequential(
+#             nn.Linear(input_size, hidden_size),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(hidden_size, self.output_dim),
+#             nn.LeakyReLU(0.2),
+#         )
+
+#     def forward(self, metrics):
+#         # metrics composition [target[0], target[1], speed, int(road_option)]
+
+#         metrics_copy = metrics.clone()
+
+#         # max speed of 60m/s or 216km/h
+#         metrics_transformed = 0.1 * metrics_copy[:, 2].unsqueeze(dim=1)
+#         metrics_transformed.requires_grad = True
+        
+#         metrics_features = self.linear(metrics_transformed)
+
+#         return metrics_features, metrics_transformed

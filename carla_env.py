@@ -94,7 +94,7 @@ class CarlaEnv(gym.Env):
                                        shape=(2,), dtype=np.float32)
 
         self.observation_space = spaces.Box(low=0, high=255,
-                                            shape=(9, 216, 384), dtype=np.uint8)
+                                            shape=(3, 192, 192), dtype=np.uint8)
 
         self.metrics_space = spaces.Box(low=-100, high=100,
                                         shape=(4,), dtype=np.float32)
@@ -134,13 +134,8 @@ class CarlaEnv(gym.Env):
         for i_channels in range(5):
             birdview_mask = new_obs['hero']['birdview']['masks'][i_channels * 3: i_channels * 3 + 3, :, :]
             self.birdview_masks.append(np.transpose(birdview_mask, [1, 2, 0]).astype(np.uint8))
-        rgb = Image.fromarray(self.rgb).convert("RGB")
-        rgb_left = Image.fromarray(self.rgb_left).convert("RGB")
-        rgb_right = Image.fromarray(self.rgb_right).convert("RGB")
-        rgb = self.preprocess(rgb)
-        rgb_left = self.preprocess(rgb_left)
-        rgb_right = self.preprocess(rgb_right)
-        obs = torch.cat([rgb, rgb_left, rgb_right])
+        birdview_mask = Image.fromarray(self.birdview_masks[0]).convert("RGB")
+        obs = self.preprocess(birdview_mask)
 
         speed = new_obs['hero']['speed']['speed']
         target_gps = new_obs['hero']['gnss']['target_gps']
@@ -173,7 +168,7 @@ class CarlaEnv(gym.Env):
         self.info = info
         reward = np.array(reward)
 
-        return obs, metrics, reward, done, info
+        return obs.float(), metrics, reward, done, info
 
     def close(self):
         pass

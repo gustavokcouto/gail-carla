@@ -190,7 +190,7 @@ class Discriminator(nn.Module):
 
 
 class ExpertDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_directory, routes=1, n_eps=1):
+    def __init__(self, dataset_directory, routes=1, n_eps=1, start=0):
         self.dataset_path = Path(dataset_directory)
         self.length = 0
         self.get_idx = []
@@ -199,7 +199,7 @@ class ExpertDataset(torch.utils.data.Dataset):
         self.trajs_metrics = []
 
         for route_idx in routes:
-            for ep_idx in range(n_eps):
+            for ep_idx in range(start, start + n_eps):
                 route_path = self.dataset_path / ('route_%02d' % route_idx) / ('ep_%02d' % ep_idx)
                 route_df = pd.read_json(route_path / 'episode.json')
                 traj_length = route_df.shape[0]
@@ -218,21 +218,22 @@ class ExpertDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.length
 
+    def process_image(self, image_path):
+        image_array = Image.open(image_path).convert("RGB")
+        image_array = image_array.convert("RGB")
+        image_tensor = self.preprocess(image_array)
+        return image_tensor
+
     def __getitem__(self, j):
         route_idx, ep_idx, step_idx = self.get_idx[j]
         if self.actual_obs[j] is None:
             # Load only the first time, images in uint8 are supposed to be light
             ep_dir = self.dataset_path / 'route_{:0>2d}/ep_{:0>2d}'.format(route_idx, ep_idx)
-            rgb = Image.open(ep_dir / 'rgb/{:0>4d}.png'.format(step_idx))
-            rgb_left = Image.open(ep_dir / 'rgb_left/{:0>4d}.png'.format(step_idx))
-            rgb_right = Image.open(ep_dir / 'rgb_right/{:0>4d}.png'.format(step_idx))
-            rgb = rgb.convert("RGB")
-            rgb_left = rgb_left.convert("RGB")
-            rgb_right = rgb_right.convert("RGB")
-            rgb = self.preprocess(rgb)
-            rgb_left = self.preprocess(rgb_left)
-            rgb_right = self.preprocess(rgb_right)
-            obs = torch.cat([rgb, rgb_left, rgb_right])
+            masks_list = []
+            for mask_index in range(1):
+                mask_tensor = self.process_image(ep_dir / 'birdview_masks/{:0>4d}_{:0>2d}.png'.format(step_idx, mask_index))
+                masks_list.append(mask_tensor)
+            obs = torch.cat(masks_list)
             self.actual_obs[j] = obs
         else:
             obs = self.actual_obs[j]

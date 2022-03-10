@@ -68,7 +68,7 @@ class EnvMonitor():
         info['ep_count'] = self.ep_count
         info['i_epoch'] = EnvEpoch.get_epoch()
         self.ep_df = self.ep_df.append(info, ignore_index=True)
-        Image.fromarray(self.env.birdview).save(self.ep_output_path / '{:0>4d}.png'.format(self.i_step))
+        # Image.fromarray(self.env.birdview).save(self.ep_output_path / '{:0>4d}.png'.format(self.i_step))
         self.i_step += 1
         return obs, metrics, reward, done, info
 
