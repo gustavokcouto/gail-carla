@@ -42,6 +42,9 @@ results4Disloss = {
     'disc_pre_loss': 0.0,
     'expert_pre_reward': 0.0,
     'policy_pre_reward': 0.0,
+    'disc_after_loss': 0.0,
+    'expert_after_reward': 0.0,
+    'policy_after_reward': 0.0,
 }
 
 
@@ -56,6 +59,9 @@ def recordDisLossResults(results, time_step):
     results4Disloss['disc_pre_loss'] = results[7]
     results4Disloss['expert_pre_reward'] = results[8]
     results4Disloss['policy_pre_reward'] = results[9]
+    results4Disloss['disc_after_loss'] = results[10]
+    results4Disloss['expert_after_reward'] = results[11]
+    results4Disloss['policy_after_reward'] = results[12]
 
     write2tensorboard(results=results4Disloss, time_step=time_step)
 
