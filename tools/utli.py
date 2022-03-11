@@ -92,10 +92,11 @@ def recordTrainResults_gail(results, time_step):
 def record_routes_rewards(routes_rewards, time_step):
     routes_metrics = {}
     for route_idx in routes_rewards.keys():
-        metric_id = 'route_{:0>2d}_max_reward'.format(route_idx)
-        routes_metrics[metric_id] = np.max(routes_rewards[route_idx])
-        metric_id = 'route_{:0>2d}_min_reward'.format(route_idx)
-        routes_metrics[metric_id] = np.min(routes_rewards[route_idx])
+        if len(routes_rewards[route_idx]) > 0:
+            metric_id = 'route_{:0>2d}_max_reward'.format(route_idx)
+            routes_metrics[metric_id] = np.max(routes_rewards[route_idx])
+            metric_id = 'route_{:0>2d}_min_reward'.format(route_idx)
+            routes_metrics[metric_id] = np.min(routes_rewards[route_idx])
 
     write2tensorboard(routes_metrics, time_step)
 

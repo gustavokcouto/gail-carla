@@ -23,7 +23,7 @@ from carla_gym.utils.expert_noiser import ExpertNoiser
 def gen_trajectories(routes_file=''):
     # Instantiate the env
     np.random.seed(1337)
-    ep_max_len = 2400
+    ep_max_len = 6000
     host = '192.168.0.4'
     port = 2000
     env = CarlaEnv(host, port, ep_max_len, routes_file, train=False, eval=True, env_id='expert')
@@ -32,9 +32,9 @@ def gen_trajectories(routes_file=''):
     expert_file_dir.mkdir(parents=True)
     longitudinal_noiser = ExpertNoiser('Throttle', frequency=15, intensity=10, min_noise_time_amount=2.0)
     lateral_noiser = ExpertNoiser('Spike', frequency=25, intensity=4, min_noise_time_amount=0.5)
-    for route_id in range(1):
+    for route_id in tqdm.tqdm(range(10)):
         env.env.set_task_idx(route_id)
-        for ep_id in tqdm.tqdm(range(3)):
+        for ep_id in range(1):
             episode_dir = expert_file_dir / ('route_%02d' % route_id) / ('ep_%02d' % ep_id)
             (episode_dir / 'rgb').mkdir(parents=True)
             (episode_dir / 'rgb_left').mkdir(parents=True)

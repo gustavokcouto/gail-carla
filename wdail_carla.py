@@ -177,7 +177,6 @@ def train(params):
             dataset_directory,
             routes=params['routes'],
             n_eps=params['n_eps_val'],
-            start=params['n_eps']
         ),
         batch_size=params['gail_batch_size'],
         shuffle=True,
