@@ -17,6 +17,11 @@ class ValeoNoDetPx(object):
         self._eval_time = 1200
 
     def get(self, timestamp):
+        c_route = self._ego_vehicle.info_criteria['route_completion']['is_route_completed']
+
+        # Done condition 3: route_deviation
+        c_route_deviation = self._ego_vehicle.info_criteria['route_deviation'] is not None
+
         # Done condition 1: vehicle blocked
         c_blocked = self._ego_vehicle.info_criteria['blocked'] is not None
 
@@ -36,16 +41,16 @@ class ValeoNoDetPx(object):
         c_lat_dist = lat_dist > thresh_lat_dist + 1e-2
         self._last_lat_dist = lat_dist
 
-        # Done condition 3: running red light
-        c_run_rl = self._ego_vehicle.info_criteria['run_red_light'] is not None
+        # # Done condition 3: running red light
+        # c_run_rl = self._ego_vehicle.info_criteria['run_red_light'] is not None
         # Done condition 4: collision
         c_collision = self._ego_vehicle.info_criteria['collision'] is not None
-        # Done condition 5: run stop sign
-        if self._ego_vehicle.info_criteria['run_stop_sign'] is not None \
-                and self._ego_vehicle.info_criteria['run_stop_sign']['event'] == 'run':
-            c_run_stop = True
-        else:
-            c_run_stop = False
+        # # Done condition 5: run stop sign
+        # if self._ego_vehicle.info_criteria['run_stop_sign'] is not None \
+        #         and self._ego_vehicle.info_criteria['run_stop_sign']['event'] == 'run':
+        #     c_run_stop = True
+        # else:
+        #     c_run_stop = False
 
         # Done condition 6: collision_px
         if self._eval_mode:
@@ -59,16 +64,17 @@ class ValeoNoDetPx(object):
         else:
             timeout = False
 
-        done = c_blocked or c_lat_dist or c_run_rl or c_collision or c_run_stop or c_collision_px or timeout
+        # done = c_blocked or c_lat_dist or c_run_rl or c_collision or c_run_stop or c_collision_px or timeout
+        done = c_route or c_route_deviation or c_blocked or c_lat_dist or c_collision or c_collision_px or timeout
 
         # terminal reward
         terminal_reward = 0.0
         if done:
             terminal_reward = -1.0
-        if c_run_rl or c_collision or c_run_stop or c_collision_px:
-            ev_vel = self._ego_vehicle.vehicle.get_velocity()
-            ev_speed = np.linalg.norm(np.array([ev_vel.x, ev_vel.y]))
-            terminal_reward -= ev_speed
+        # if c_run_rl or c_collision or c_run_stop or c_collision_px:
+        #     ev_vel = self._ego_vehicle.vehicle.get_velocity()
+        #     ev_speed = np.linalg.norm(np.array([ev_vel.x, ev_vel.y]))
+        #     terminal_reward -= ev_speed
 
         # terminal guide
         exploration_suggest = {
@@ -82,7 +88,8 @@ class ValeoNoDetPx(object):
             if c_lat_dist:
                 exploration_suggest['n_steps'] = 100
                 exploration_suggest['suggest'] = ('go', 'turn')
-            if c_run_rl or c_collision or c_run_stop or c_collision_px:
+            # if c_run_rl or c_collision or c_run_stop or c_collision_px:
+            if c_collision or c_collision_px:
                 exploration_suggest['n_steps'] = 100
                 exploration_suggest['suggest'] = ('stop', '')
 
@@ -90,7 +97,7 @@ class ValeoNoDetPx(object):
 
         debug_texts = [
             f'ev: {int(self._eval_mode)} blo:{int(c_blocked)} to:{int(timeout)}',
-            f'c_px:{int(c_collision_px)} col:{int(c_collision)} red:{int(c_run_rl)} st:{int(c_run_stop)}',
+            f'c_px:{int(c_collision_px)} col:{int(c_collision)}',
             f"latd:{int(c_lat_dist)}, {lat_dist:.2f}/{thresh_lat_dist:.2f}, "
             f"[{exploration_suggest['n_steps']} {exploration_suggest['suggest']}]"
         ]

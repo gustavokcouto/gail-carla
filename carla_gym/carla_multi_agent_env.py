@@ -30,8 +30,8 @@ class CarlaMultiAgentEnv(gym.Env):
         # define observation spaces exposed to agent
         self._om_handler = ObsManagerHandler(obs_configs)
         self._ev_handler = EgoVehicleHandler(self._client, reward_configs, terminal_configs, train=train)
-        self._zw_handler = ZombieWalkerHandler(self._client)
-        self._zv_handler = ZombieVehicleHandler(self._client, tm_port=self._tm.get_port())
+        # self._zw_handler = ZombieWalkerHandler(self._client)
+        # self._zv_handler = ZombieVehicleHandler(self._client, tm_port=self._tm.get_port())
         self._sa_handler = ScenarioActorHandler(self._client)
         # self._wt_handler = WeatherHandler(self._world)
 
@@ -74,14 +74,14 @@ class CarlaMultiAgentEnv(gym.Env):
         ev_spawn_locations = self._ev_handler.reset(self._task['ego_vehicles'])
         logger.debug("_ev_handler reset done!!")
 
-        self._sa_handler.reset(self._task['scenario_actors'], self._ev_handler.ego_vehicles)
-        logger.debug("_sa_handler reset done!!")
+        # self._sa_handler.reset(self._task['scenario_actors'], self._ev_handler.ego_vehicles)
+        # logger.debug("_sa_handler reset done!!")
 
-        self._zw_handler.reset(self._task['num_zombie_walkers'], ev_spawn_locations)
-        logger.debug("_zw_handler reset done!!")
+        # self._zw_handler.reset(self._task['num_zombie_walkers'], ev_spawn_locations)
+        # logger.debug("_zw_handler reset done!!")
 
-        self._zv_handler.reset(self._task['num_zombie_vehicles'], ev_spawn_locations)
-        logger.debug("_zv_handler reset done!!")
+        # self._zv_handler.reset(self._task['num_zombie_vehicles'], ev_spawn_locations)
+        # logger.debug("_zv_handler reset done!!")
 
         self._om_handler.reset(self._ev_handler.ego_vehicles)
         logger.debug("_om_handler reset done!!")
@@ -198,8 +198,8 @@ class CarlaMultiAgentEnv(gym.Env):
 
     def clean(self):
         self._sa_handler.clean()
-        self._zw_handler.clean()
-        self._zv_handler.clean()
+        # self._zw_handler.clean()
+        # self._zv_handler.clean()
         self._om_handler.clean()
         self._ev_handler.clean()
         # self._wt_handler.clean()
