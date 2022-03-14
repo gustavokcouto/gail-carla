@@ -21,10 +21,20 @@ class Policy(nn.Module):
 
         self.max = torch.Tensor([1, 1])
         self.min = torch.Tensor([-1, 0])
+        self.acc_exploration_dist = [
+            torch.FloatTensor([0.0, 0.0]),  # 'void'
+            torch.FloatTensor([1.0, 2.5]),  # 'go'
+            torch.FloatTensor([1.5, 1.0])  # 'stop'
+        ]
+        self.steer_exploration_dist = [
+            torch.FloatTensor([0.0, 0.0]),  # 'void'
+            torch.FloatTensor([1.0, 1.0]),  # 'turn'
+            torch.FloatTensor([3.0, 3.0])  # 'straight'
+        ]
 
     def act(self, obs, metrics, deterministic=False):
-        value, output, logstd = self.base(obs, metrics)
-        dist = torch.distributions.Normal(output, logstd.exp())
+        value, output = self.base(obs, metrics)
+        dist = torch.distributions.Beta(output[..., :2], output[..., 2:])
         if deterministic:
             action = dist.mean
         else:
@@ -32,6 +42,7 @@ class Policy(nn.Module):
 
         # action = torch.max(torch.min(action, self.max.to(action)), self.min.to(action))
         action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
+        action = self.unscale_action(action)
 
         return value, action, action_log_probs
 
@@ -39,18 +50,44 @@ class Policy(nn.Module):
         self.base.set_epoch(epoch)
 
     def get_value(self, obs, metrics):
-        value, _, _ = self.base(obs, metrics)
+        value, _ = self.base(obs, metrics)
         return value
 
-    def evaluate_actions(self, obs, metrics, action):
-        value, output, logstd = self.base(obs, metrics)
-        dist = torch.distributions.Normal(output, logstd.exp())
+    def exploration_loss(self, dist, metrics):
+        steer_exploration = metrics[:, 5].long()
+        acc_exploration = metrics[:, 6].long()
+        alpha = dist.concentration1.detach().clone()
+        beta = dist.concentration0.detach().clone()
+        for i in range(len(alpha)):
+            if steer_exploration[i] > 0:
+                beta[i][0] = self.steer_exploration_dist[steer_exploration[i]][0]
+                alpha[i][0] = self.steer_exploration_dist[steer_exploration[i]][1]
+            if acc_exploration[i] > 0:
+                beta[i][1] = self.acc_exploration_dist[acc_exploration[i]][0]
+                alpha[i][1] = self.acc_exploration_dist[acc_exploration[i]][1]
+        dist_exp = torch.distributions.Beta(alpha, beta)
+        exploration_loss = torch.distributions.kl_divergence(dist, dist_exp)
+        return torch.mean(exploration_loss)
 
+    def evaluate_actions(self, obs, metrics, action):
+        value, output = self.base(obs, metrics)
+        dist = torch.distributions.Beta(output[..., :2], output[..., 2:])
+        exploration_loss = self.exploration_loss(dist, metrics)
+        action = self.scale_action(action)
         action_log_probs = dist.log_prob(action).sum(-1, keepdim=True)
         dist_entropy = dist.entropy().sum(-1).mean()
-        steer_std = logstd[0, 0].detach().cpu()
-        throttle_std = logstd[0, 1].detach().cpu()
-        return value, action_log_probs, dist_entropy, steer_std, throttle_std
+        steer_std = dist.entropy()[..., 0].sum(-1).mean()
+        throttle_std = dist.entropy()[..., 1].sum(-1).mean()
+        return value, action_log_probs, dist_entropy, exploration_loss, steer_std, throttle_std
+
+    def scale_action(self, action, eps=1e-7):
+        action[..., 0] = (action[..., 0] + 1) / 2
+        action = torch.clamp(action, eps, 1-eps)
+        return action
+
+    def unscale_action(self, action):
+        action[..., 0] = action[..., 0] * 2 - 1
+        return action
 
 
 class CNNBase(nn.Module):
@@ -63,10 +100,9 @@ class CNNBase(nn.Module):
         hidden_size = 512
         self.body = NNBody(self.obs_processor.output_dim +
                            self.metrics_processor.output_dim, hidden_size)
-        self.head = NNHead(hidden_size, num_outputs, value=True)
-        self.logstd = torch.Tensor(logstd)
+        self.head = NNHead(hidden_size, 2 * num_outputs, value=True)
 
-        self.activation = activation
+        self.activation = nn.Softplus()
 
     def forward(self, obs, metrics):
         obs_features, _ = self.obs_processor(obs)
@@ -77,13 +113,8 @@ class CNNBase(nn.Module):
         road_options -= 1
         critic, output = self.head(body_features)
 
-        if self.activation:
-            output[..., 0] = torch.tanh(output[..., 0])
-            output[..., 1] = torch.sigmoid(output[..., 1])
-        zeros = torch.zeros(output.size()).to(output)
-        logstd = self.logstd.to(output)
-        logstd = logstd + zeros
-        return critic, output, logstd
+        output = self.activation(output)
+        return critic, output
 
 
 class NNBody(nn.Module):

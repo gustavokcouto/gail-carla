@@ -31,6 +31,8 @@ class PPO():
         self.act_space = act_space
 
         self.value_loss_coef = value_loss_coef
+        self.explore_coef = 0.5
+        self.entropy_coef = 0.01
 
         self.device = device
 
@@ -52,6 +54,7 @@ class PPO():
         action_loss_epoch = 0
         gail_action_loss_epoch = 0
         dist_entropy_epoch = 0
+        exploration_loss_epoch = 0
         bc_loss_epoch = 0
         steer_std_epoch = 0
         throttle_std_epoch = 0
@@ -74,7 +77,7 @@ class PPO():
                 adv_targ = adv_targ.to(self.device)
 
                 # Reshape to do in a single forward pass for all steps
-                values, action_log_probs, dist_entropy, steer_std, throttle_std = self.actor_critic.evaluate_actions(
+                values, action_log_probs, dist_entropy, exploration_loss, steer_std, throttle_std = self.actor_critic.evaluate_actions(
                     obs_batch, metrics_batch, actions_batch)
 
                 ratio = torch.exp(action_log_probs -
@@ -91,7 +94,7 @@ class PPO():
                         exp_metrics = Variable(exp_metrics).to(action_loss.device)
                         exp_action = Variable(exp_action).to(action_loss.device)
                         # Get BC loss
-                        _, alogprobs, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, exp_action)
+                        _, alogprobs, _, _, _, _ = self.actor_critic.evaluate_actions(exp_state, exp_metrics, exp_action)
                         bcloss = -alogprobs.mean()
 
                         bc_loss_epoch += bcloss.item()
@@ -112,8 +115,9 @@ class PPO():
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
+                ppo_loss = value_loss * self.value_loss_coef + action_loss - self.entropy_coef * dist_entropy + self.explore_coef * exploration_loss
                 self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss).backward()
+                (ppo_loss).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
                 self.optimizer.step()
@@ -121,6 +125,7 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                exploration_loss_epoch += exploration_loss.item()
                 steer_std_epoch += steer_std.item()
                 throttle_std_epoch += throttle_std.item()
                 n_updates += 1
@@ -128,6 +133,7 @@ class PPO():
         value_loss_epoch /= n_updates
         action_loss_epoch /= n_updates
         dist_entropy_epoch /= n_updates
+        exploration_loss_epoch /= n_updates
         bc_loss_epoch /= n_updates
         gail_action_loss_epoch /= n_updates
         steer_std_epoch /= n_updates
@@ -137,5 +143,5 @@ class PPO():
             self.gamma *= self.decay
 
         
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, bc_loss_epoch, \
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, exploration_loss_epoch, bc_loss_epoch, \
             gail_action_loss_epoch, self.gamma, steer_std_epoch,  throttle_std_epoch

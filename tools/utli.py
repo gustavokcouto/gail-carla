@@ -10,6 +10,7 @@ results4loss = {
     'ppo_value': 0.0,
     'ppo_loss': 0.0,
     'ppo_entropy': 0.0,
+    'exploration_loss': 0.0,
     'bc_loss': 0.0,
     'gail_loss': 0.0,
     'gail_gamma': 0.0,
@@ -22,11 +23,12 @@ def recordLossResults(results, time_step):
     results4loss['ppo_value'] = results[0]
     results4loss['ppo_loss'] = results[1]
     results4loss['ppo_entropy'] = results[2]
-    results4loss['bc_loss'] = results[3]
-    results4loss['gail_loss'] = results[4]
-    results4loss['gail_gamma'] = results[5]
-    results4loss['steer_std'] = results[6]
-    results4loss['throttle_std'] = results[7]
+    results4loss['exploration_loss'] = results[3]
+    results4loss['bc_loss'] = results[4]
+    results4loss['gail_loss'] = results[5]
+    results4loss['gail_gamma'] = results[6]
+    results4loss['steer_std'] = results[7]
+    results4loss['throttle_std'] = results[8]
 
     write2tensorboard(results=results4loss, time_step=time_step)
 

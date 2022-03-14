@@ -10,8 +10,8 @@
     "trajectory": "routes_training",
     "n_eps": 1,
     "n_eps_val": 1,
-    "routes": [0, 1, 2, 4, 5, 6, 7, 8, 9],
-    "eval_route": 3,
+    "routes": [0],
+    "eval_route": 0,
     "envs_params": [
         {"host": "192.168.0.4", "port": 2000},
         {"host": "192.168.0.4", "port": 2002},
@@ -44,8 +44,8 @@
     "gail_eps": 1e-8,
     "gail_betas": [0.9, 0.99],
     "gail_thre": 10,
-    "gail_pre_epoch": 6,
-    "gail_epoch": 1,
+    "gail_pre_epoch": 60,
+    "gail_epoch": 12,
     "gail_max_grad_norm": 0.5,
     "log_interval": 1,
     "eval_interval": 3,
@@ -53,5 +53,5 @@
     "decay": 1.0,
     "gailgamma": 0.0,
     "use_activation": true,
-    "resume_training": true
+    "resume_training": false
 }

@@ -14,6 +14,19 @@ from carla_gym.envs import LeaderboardEnv
 from PIL import Image, ImageDraw
 
 
+ACC_EXPLORATION_DICT = {
+    '': 0,
+    'go': 1,
+    'stop': 2
+}
+
+
+STEER_EXPLORATION_DICT = {
+    '': 0,
+    'turn': 1
+}
+
+
 obs_configs = {
     'hero': {
         'speed': {
@@ -67,7 +80,7 @@ reward_configs = {
 }
 terminal_configs = {
     'hero': {
-        'entry_point': 'terminal.leaderboard:Leaderboard',
+        'entry_point': 'terminal.valeo_no_det_px:ValeoNoDetPx',
     }
 }
 env_configs = {
@@ -75,7 +88,6 @@ env_configs = {
     'weather_group': 'train',
     'routes_group': 'train'
 }
-
 
 
 class CarlaEnv(gym.Env):
@@ -97,7 +109,7 @@ class CarlaEnv(gym.Env):
                                             shape=(3, 192, 192), dtype=np.uint8)
 
         self.metrics_space = spaces.Box(low=-100, high=100,
-                                        shape=(4,), dtype=np.float32)
+                                        shape=(7,), dtype=np.float32)
 
         self.preprocess = transforms.Compose([
             transforms.ToTensor(),
@@ -121,7 +133,14 @@ class CarlaEnv(gym.Env):
 
         if action is not None:
             control.steer = float(action[0])
-            control.throttle = float(action[1])
+            
+            acc = float(action[1])
+            if acc >= 0.0:
+                control.throttle = acc
+                control.brake = 0.0
+            else:
+                control.throttle = 0.0
+                control.brake = abs(acc)
 
         driver_control = {'hero': control}
         new_obs, reward, done, info = self.env.step(driver_control)
@@ -140,8 +159,21 @@ class CarlaEnv(gym.Env):
         speed = new_obs['hero']['speed']['speed']
         target_gps = new_obs['hero']['gnss']['target_gps']
         command = new_obs['hero']['gnss']['command']
+        exploration_suggest = info['hero']['terminal_debug']['exploration_suggest']
+        exploration_nsteps = exploration_suggest['n_steps']
+        acc_exploration = exploration_suggest['suggest'][0]
+        steer_exploration = exploration_suggest['suggest'][1]
+        # metrics composition [target[0], target[1], speed, int(road_option), exploration_nsteps, acc_exploration, steer_exploration]
 
-        metrics = torch.Tensor([target_gps[0], target_gps[1], speed[0], command[0]])
+        metrics = torch.Tensor([
+            target_gps[0],
+            target_gps[1],
+            speed[0],
+            command[0],
+            exploration_nsteps,
+            STEER_EXPLORATION_DICT[steer_exploration],
+            ACC_EXPLORATION_DICT[acc_exploration]
+        ])
 
         self.cur_length += 1
 

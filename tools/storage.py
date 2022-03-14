@@ -28,7 +28,12 @@ class RolloutStorage(object):
         self.masks[self.step + 1].copy_(masks)
 
         self.step = (self.step + 1) % self.num_steps
-
+        for i in range(self.num_processes):
+            n_steps = metrics[i][4].long()
+            if n_steps > 0:
+                n_start = max(0, self.step - n_steps)
+                self.metrics[n_start:self.step, i, 5:] = metrics[i][5:]
+                self.metrics[self.step, i] = self.metrics[0, i]
     def after_update(self):
         self.obs[0].copy_(self.obs[-1])
         self.metrics[0].copy_(self.metrics[-1])

@@ -14,7 +14,8 @@ def worker(remote, parent_remote, env_fn_wrapper):
             if cmd == 'step':
                 ob, metrics, reward, done, info = env.step(data)
                 if done:
-                    ob, metrics = env.reset()
+                    ob, new_metrics = env.reset()
+                    metrics[:4] = new_metrics[:4]
                 remote.send((ob, metrics, reward, done, info))
             elif cmd == 'reset':
                 ob, metrics = env.reset()

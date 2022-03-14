@@ -216,10 +216,10 @@ def gailLearning_mujoco_origin(run_params,
 
         # training PPO policy
         if run_params['bcgail']:
-            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
+            value_loss, action_loss, dist_entropy, exploration_loss, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
                 rollouts, gail_train_loader)
         else:
-            value_loss, action_loss, dist_entropy, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
+            value_loss, action_loss, dist_entropy, exploration_loss, bc_loss, gail_loss, gail_gamma, steer_std, throttle_std = agent.update(
                 rollouts)
 
         if i_update % run_params['eval_interval'] == 0 or eval_reward is None:
@@ -260,6 +260,7 @@ def gailLearning_mujoco_origin(run_params,
         utli.recordLossResults(results=(value_loss,
                                         action_loss,
                                         dist_entropy,
+                                        exploration_loss,
                                         bc_loss,
                                         gail_loss,
                                         gail_gamma,

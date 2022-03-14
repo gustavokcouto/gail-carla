@@ -32,9 +32,9 @@ def gen_trajectories(routes_file=''):
     expert_file_dir.mkdir(parents=True)
     longitudinal_noiser = ExpertNoiser('Throttle', frequency=15, intensity=10, min_noise_time_amount=2.0)
     lateral_noiser = ExpertNoiser('Spike', frequency=25, intensity=4, min_noise_time_amount=0.5)
-    for route_id in tqdm.tqdm(range(10)):
+    for route_id in tqdm.tqdm(range(1)):
         env.env.set_task_idx(route_id)
-        for ep_id in range(1):
+        for ep_id in range(3):
             episode_dir = expert_file_dir / ('route_%02d' % route_id) / ('ep_%02d' % ep_id)
             (episode_dir / 'rgb').mkdir(parents=True)
             (episode_dir / 'rgb_left').mkdir(parents=True)
